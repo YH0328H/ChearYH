@@ -49,8 +49,10 @@ class Perceiver:
         allow_apps: frozenset[str] = frozenset(),
         deny_apps: frozenset[str] = frozenset(),
         hamming_threshold: int = 5,
+        release: Callable[[], None] | None = None,
     ) -> None:
         self._capture = capture
+        self._release = release
         self._describe = describe
         self._foreground_app = foreground_app
         self._allow = allow_apps
@@ -79,7 +81,7 @@ class Perceiver:
     def _can_capture(self) -> bool:
         return not self._capture_paused and self._app_allowed(self._foreground_app())
 
-    def tick(self) -> Tick:
+    def _tick(self) -> Tick:
         if not self._can_capture():
             return Tick(False, None, None)
         thumb = self._capture()
@@ -98,7 +100,7 @@ class Perceiver:
             return Tick(False, None, distance)
         return self._record(distance)
 
-    def look_now(self) -> Tick:
+    def _look(self) -> Tick:
         """One user-requested look. Describes even if the screen did not change.
 
         Still blocked by the capture pause and the app filter.
@@ -109,6 +111,23 @@ class Perceiver:
         self._last_hash = average_hash(thumb)
         del thumb
         return self._record(None)
+
+    def tick(self) -> Tick:
+        try:
+            return self._tick()
+        finally:
+            self._drop_frame()
+
+    def look_now(self) -> Tick:
+        try:
+            return self._look()
+        finally:
+            self._drop_frame()
+
+    def _drop_frame(self) -> None:
+        # Frame memory is released at the end of every tick, changed or not.
+        if self._release is not None:
+            self._release()
 
     def _record(self, distance: int | None) -> Tick:
         description: str | None = None

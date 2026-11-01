@@ -7,6 +7,7 @@ full image is dropped. Nothing is written to disk.
 from __future__ import annotations
 
 import ctypes
+import io
 import os
 from ctypes import wintypes
 
@@ -22,14 +23,17 @@ def to_thumbnail(image: Image.Image) -> Thumbnail:
     return list(small.getdata())
 
 
-def capture_primary_monitor() -> Thumbnail:
+def grab_primary_monitor() -> tuple[Thumbnail, bytes]:
+    """Return the thumbnail and a PNG of the primary monitor. Both stay in memory."""
     import mss
 
     with mss.mss() as sct:
         shot = sct.grab(sct.monitors[1])
         image = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
     try:
-        return to_thumbnail(image)
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        return to_thumbnail(image), buf.getvalue()
     finally:
         image.close()
 
