@@ -1,0 +1,13 @@
+[project]
+name = "cether"
+version = "0.1.0"
+description = "CetherYH character runtime core (v1 vertical slice)"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
