@@ -51,17 +51,16 @@ def run_checkpoint(
     now: datetime,
     expression_impulse: float,
     gate_reason: str | None,
-    user_responded_within: timedelta | None,
-    hesitation_window: timedelta,
+    hesitation_resolution: Outcome | None,
     mind_box: MindBox,
     hesitation_text: str,
 ) -> CheckpointResult:
     """Run one checkpoint. Returns the outcome; does not call a model.
 
-    `user_responded_within` is the time until the user clicked during the
-    hesitation window, or None if they did not. Whether a click means speak,
-    cancel, or soft is left to the persona. Here the click only counts as a
-    reply signal, which matches the spec: no hard-coded meaning.
+    `hesitation_resolution` is what the persona layer decided during the
+    hesitation window: SPOKE, WITHDRAWN, or SOFT, or None if the window ended
+    with no decision. This flow does not interpret clicks. Persona and runtime
+    own that meaning (spec 10.15.2 and 10.15.3).
     """
     reason = drive_check(expression_impulse)
     if reason is not None:
@@ -69,12 +68,12 @@ def run_checkpoint(
     if gate_reason is not None:
         return CheckpointResult(Outcome.BLOCKED, gate_reason)
 
-    # 犹豫必须有可见信号；这里仅记录，由 UI 层展示
-    if user_responded_within is not None and user_responded_within <= hesitation_window:
+    if hesitation_resolution == Outcome.SPOKE:
         return CheckpointResult(Outcome.SPOKE, hesitation_text=hesitation_text)
 
-    # 未开口的犹豫必须写入心事匣
+    # 撤回、轻方式、或窗口结束未决定，都视为未开口，必须写入心事匣
+    outcome = hesitation_resolution if hesitation_resolution == Outcome.SOFT else Outcome.WITHDRAWN
     mind_box.items.append(
         {"ts": now.isoformat(), "text": hesitation_text, "weight": "low", "kind": "hesitation"}
     )
-    return CheckpointResult(Outcome.WITHDRAWN, hesitation_text=hesitation_text)
+    return CheckpointResult(outcome, hesitation_text=hesitation_text)
