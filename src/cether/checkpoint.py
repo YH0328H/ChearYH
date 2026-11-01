@@ -39,7 +39,7 @@ class CheckpointResult:
     hesitation_text: str | None = None
 
 
-def drive_check(expression_impulse: float, threshold: float = 0.5) -> str | None:
+def drive_check(expression_impulse: float, threshold: float) -> str | None:
     """First step. Return a reason if the expression impulse is too low."""
     if expression_impulse < threshold:
         return "low_impulse"
@@ -50,6 +50,7 @@ def run_checkpoint(
     *,
     now: datetime,
     expression_impulse: float,
+    impulse_threshold: float,
     gate_reason: str | None,
     hesitation_resolution: Outcome | None,
     mind_box: MindBox,
@@ -62,7 +63,7 @@ def run_checkpoint(
     with no decision. This flow does not interpret clicks. Persona and runtime
     own that meaning (spec 10.15.2 and 10.15.3).
     """
-    reason = drive_check(expression_impulse)
+    reason = drive_check(expression_impulse, impulse_threshold)
     if reason is not None:
         return CheckpointResult(Outcome.BLOCKED, reason)
     if gate_reason is not None:

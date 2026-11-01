@@ -29,6 +29,7 @@ class Window:
 
 @dataclass(frozen=True)
 class CheckpointConfig:
+    impulse_threshold: float
     base_seconds: float
     hourly_cap: int
     frustration_factor: float
@@ -49,6 +50,7 @@ def load_window_config(path: Path) -> tuple[CheckpointConfig, list[Window]]:
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
     c = raw["checkpoint"]
     cfg = CheckpointConfig(
+        impulse_threshold=float(c["expression_impulse_threshold"]),
         base_seconds=float(c["base_minutes"]) * 60,
         hourly_cap=int(c["hourly_cap"]),
         frustration_factor=float(c["frustration_factor"]),
