@@ -40,7 +40,8 @@ def build_request(cfg: VisionConfig, png_bytes: bytes) -> tuple[str, dict, dict]
                 ],
             }
         ],
-        "max_tokens": 120,
+        # 思考模型会先消耗推理 token，120 会导致 content 为空，故放宽
+        "max_tokens": 1024,
     }
     headers = {"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json"}
     url = cfg.base_url.rstrip("/") + "/chat/completions"
