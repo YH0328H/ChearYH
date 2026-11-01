@@ -1,0 +1,57 @@
+import sys
+import tempfile
+import unittest
+from datetime import datetime, timedelta
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from cether.wake import WakeState  # noqa: E402
+
+CLOSED = datetime(2026, 11, 1, 20, 0)
+
+
+class WakeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.dir = Path(tempfile.mkdtemp()) / "wake"
+        self.state = WakeState(self.dir)
+
+    def test_no_snapshot_means_nothing_pending(self) -> None:
+        self.assertIsNone(self.state.pending(CLOSED))
+
+    def test_pending_reports_gap_and_snapshot(self) -> None:
+        self.state.save_snapshot({"mood": "calm"}, CLOSED)
+        p = self.state.pending(CLOSED + timedelta(hours=3))
+        self.assertEqual(p.gap_seconds, 3 * 3600)
+        self.assertEqual(p.snapshot, {"mood": "calm"})
+
+    def test_consumed_injection_is_not_repeated(self) -> None:
+        self.state.save_snapshot({"k": 1}, CLOSED)
+        self.state.mark_consumed()
+        self.assertIsNone(self.state.pending(CLOSED + timedelta(hours=1)))
+
+    def test_unconsumed_injection_survives_switch_away(self) -> None:
+        # Wake happened, but the user never spoke before switching away.
+        self.state.save_snapshot({"k": 1}, CLOSED)
+        self.assertIsNotNone(self.state.pending(CLOSED + timedelta(minutes=5)))
+        self.assertIsNotNone(self.state.pending(CLOSED + timedelta(hours=2)))
+
+    def test_new_close_makes_injection_pending_again(self) -> None:
+        self.state.save_snapshot({"k": 1}, CLOSED)
+        self.state.mark_consumed()
+        self.state.save_snapshot({"k": 2}, CLOSED + timedelta(hours=1))
+        p = self.state.pending(CLOSED + timedelta(hours=2))
+        self.assertEqual(p.snapshot, {"k": 2})
+
+    def test_mark_consumed_without_snapshot_is_noop(self) -> None:
+        self.state.mark_consumed()
+        self.assertIsNone(self.state.pending(CLOSED))
+
+    def test_save_leaves_no_temp_file(self) -> None:
+        self.state.save_snapshot({"k": 1}, CLOSED)
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["wake.json"])
+
+
+if __name__ == "__main__":
+    unittest.main()
