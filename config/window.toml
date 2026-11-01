@@ -1,0 +1,33 @@
+# 主动对话窗口与检查点配置（v1）。时间为本机本地时间，HH:MM 格式。
+# 优先级：睡眠 > 静默模式 > 窗口 > 检查点。检查点只在窗口内生效。
+
+[checkpoint]
+# 基准间隔（分钟），用于固定间隔与随机间隔
+base_minutes = 20
+# 每小时全局上限（滚动一小时计数）
+hourly_cap = 2
+# 连续两次未开口后，下次间隔乘以该系数（即后移 50%）
+frustration_factor = 1.5
+# 固定间隔的偏移范围，比例；偏移分布右偏，众数 +10%
+fixed_skew_low = -0.3
+fixed_skew_high = 0.3
+fixed_skew_mode = 0.1
+# 随机间隔对数正态的 sigma，中位数为 base_minutes
+random_sigma = 0.5
+# 自定义时间点的偏移，秒，取值范围 [min, max]，正负号随机
+custom_offset_min_seconds = 120
+custom_offset_max_seconds = 300
+
+[[window]]
+name = "晚间陪伴"
+start = "19:00"
+end = "23:00"
+mode = "allow"
+penetrate = false
+
+[[window]]
+name = "午后闲聊"
+start = "14:00"
+end = "15:30"
+mode = "boost"
+penetrate = true
