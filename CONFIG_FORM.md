@@ -16,10 +16,10 @@
 
 | 槽位 | 渠道与接口地址 | 模型 ID | API Key 环境变量名 | 是否启用 |
 |---|---|---|---|---|
-| 提取（结构化脱水） | 公益站：https://ly.77625.xyz | deepseek-v4.1-flash | CETHER_EXTRACT_API_KEY（Key 未写入文件，请设到本机环境变量） | 是 |
-| 叙事（L1 生成） | 公益站：https://ly.77625.xyz | deepseek-v4.1-flash | CETHER_EXTRACT_API_KEY（与提取槽位共用，Key 未写入文件） | 是 |
-| 反思 / 梦境 | 公益站：https://ly.77625.xyz | deepseek-v4.1-flash | CETHER_EXTRACT_API_KEY（与提取槽位共用，Key 未写入文件） | 是 |
-| 人设解析 | 公益站：https://ly.77625.xyz | deepseek-v4.1-flash | CETHER_EXTRACT_API_KEY（与提取槽位共用，Key 未写入文件） | 是 |
+| 提取（结构化脱水） | 公益站：https://ly.77625.xyz | x-deepseek-v4.1-flash | CETHER_EXTRACT_API_KEY（Key 未写入文件，请设到本机环境变量） | 是 |
+| 叙事（L1 生成） | 公益站：https://ly.77625.xyz | x-deepseek-v4.1-flash | CETHER_EXTRACT_API_KEY（与提取槽位共用，Key 未写入文件） | 是 |
+| 反思 / 梦境 | 公益站：https://ly.77625.xyz | x-deepseek-v4.1-flash | CETHER_EXTRACT_API_KEY（与提取槽位共用，Key 未写入文件） | 是 |
+| 人设解析 | 公益站：https://ly.77625.xyz | x-deepseek-v4.1-flash | CETHER_EXTRACT_API_KEY（与提取槽位共用，Key 未写入文件） | 是 |
 | Embedding（向量） | 硅基流动：https://api.siliconflow.cn/v1 | BAAI/bge-m3（1024 维） | CETHER_EMBED_API_KEY（Key 未写入文件） | 是 |
 | Rerank（重排） | 硅基流动：https://api.siliconflow.cn/v1 | BAAI/bge-reranker-v2-m3 | CETHER_EMBED_API_KEY（与 Embedding 共用，Key 未写入文件） | 是 |
 | TTS（语音） | Breeze Blue：https://api.breeze.blue/v1 | breeze-tts-2-multilingual | CETHER_TTS_API_KEY（Key 未写入文件） | 是 |
