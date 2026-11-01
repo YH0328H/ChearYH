@@ -44,25 +44,41 @@ class Perceiver:
         capture: Callable[[], Thumbnail],
         describe: Callable[[], str],
         world_log: Path,
+        foreground_app: Callable[[], str],
+        allow_apps: frozenset[str] = frozenset(),
+        deny_apps: frozenset[str] = frozenset(),
         hamming_threshold: int = 5,
     ) -> None:
         self._capture = capture
         self._describe = describe
+        self._foreground_app = foreground_app
+        self._allow = allow_apps
+        self._deny = deny_apps
         self._world_log = world_log
         self._threshold = hamming_threshold
         self._last_hash: int | None = None
-        self._active = True
+        self._capture_paused = False
         self.model_calls = 0
         world_log.parent.mkdir(parents=True, exist_ok=True)
 
-    def pause(self) -> None:
-        self._active = False
+    def pause_capture(self) -> None:
+        """Stop screen capture. Screen-change descriptions stop too."""
+        self._capture_paused = True
 
-    def resume(self) -> None:
-        self._active = True
+    def resume_capture(self) -> None:
+        self._capture_paused = False
+
+    def _app_allowed(self, app: str) -> bool:
+        if app in self._deny:
+            return False
+        if self._allow and app not in self._allow:
+            return False
+        return True
 
     def tick(self) -> Tick:
-        if not self._active:
+        if self._capture_paused:
+            return Tick(False, None, None)
+        if not self._app_allowed(self._foreground_app()):
             return Tick(False, None, None)
         thumb = self._capture()
         current = average_hash(thumb)

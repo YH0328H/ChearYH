@@ -26,11 +26,13 @@ class PerceptionTests(unittest.TestCase):
         self.describe_calls += 1
         return "屏幕有变化"
 
-    def _perceiver(self) -> Perceiver:
+    def _perceiver(self, app: str = "editor", **kwargs) -> Perceiver:
         return Perceiver(
             capture=lambda: self.frames.pop(0),
             describe=self._describe,
             world_log=self.log,
+            foreground_app=lambda: app,
+            **kwargs,
         )
 
     def test_first_frame_is_a_change(self) -> None:
@@ -65,7 +67,7 @@ class PerceptionTests(unittest.TestCase):
     def test_paused_perception_does_not_capture(self) -> None:
         self.frames = [frame(0)]
         p = self._perceiver()
-        p.pause()
+        p.pause_capture()
         t = p.tick()
         self.assertFalse(t.changed)
         self.assertEqual(len(self.frames), 1)  # capture was never called
@@ -77,6 +79,33 @@ class PerceptionTests(unittest.TestCase):
         p.tick()
         for name, value in vars(p).items():
             self.assertFalse(isinstance(value, list) and len(value) == 64, name)
+
+    def test_denied_app_skips_capture(self) -> None:
+        self.frames = [frame(0)]
+        p = self._perceiver(app="banking", deny_apps=frozenset({"banking"}))
+        t = p.tick()
+        self.assertFalse(t.changed)
+        self.assertEqual(len(self.frames), 1)
+        self.assertEqual(p.model_calls, 0)
+
+    def test_allowlist_excludes_other_apps(self) -> None:
+        self.frames = [frame(0)]
+        p = self._perceiver(app="chat", allow_apps=frozenset({"editor"}))
+        self.assertFalse(p.tick().changed)
+        self.assertEqual(len(self.frames), 1)
+
+    def test_allowlist_permits_listed_app(self) -> None:
+        self.frames = [frame(0)]
+        p = self._perceiver(app="editor", allow_apps=frozenset({"editor"}))
+        self.assertTrue(p.tick().changed)
+
+    def test_resume_restores_capture(self) -> None:
+        self.frames = [frame(0), frame(0)]
+        p = self._perceiver()
+        p.pause_capture()
+        p.tick()
+        p.resume_capture()
+        self.assertTrue(p.tick().changed)
 
     def test_hash_distance(self) -> None:
         self.assertEqual(hamming(average_hash(frame(0)), average_hash(frame(0))), 0)
