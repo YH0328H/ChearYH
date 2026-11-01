@@ -24,7 +24,7 @@
 | Rerank（重排） | 硅基流动：https://api.siliconflow.cn/v1 | BAAI/bge-reranker-v2-m3 | CETHER_EMBED_API_KEY（与 Embedding 共用，Key 未写入文件） | 是 |
 | TTS（语音） | Breeze Blue：https://api.breeze.blue/v1 | breeze-tts-2-multilingual | CETHER_TTS_API_KEY（Key 未写入文件） | 是 |
 | 生图 | 中转：启明星：https://api.aisj.ai | gpt-image-2.5-sunburst（按次计费，约 0.08 元/次） | CETHER_IMAGE_API_KEY（Key 未写入文件） | 否（默认关闭，触发节点才调用） |
-| 视觉描述（屏幕） | 中转：启明星：https://api.aisj.ai（与对话通道同一渠道） | deepseek-v4.1（视觉输入，ID 待启明星核对） | CETHER_CHAT_API_KEY（与对话通道共用，Key 未写入文件） | 是（截图只在云端描述，原图不保存） |
+| 视觉描述（屏幕） | 中转：启明星：https://api.aisj.ai（与对话通道同一渠道） | deepseek-v4.1-flash（视觉输入，ID 待启明星核对） | CETHER_CHAT_API_KEY（与对话通道共用，Key 未写入文件） | 是（截图只在云端描述，原图不保存） |
 
 ## 3. 降级顺序（可保持默认）
 
