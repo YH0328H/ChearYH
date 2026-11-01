@@ -42,6 +42,19 @@ class VisionTests(unittest.TestCase):
         with self.assertRaises(VisionError):
             describe(CFG, PNG, lambda u, b, h: reply("   "))
 
+    def test_load_config_reads_key_from_environment_only(self) -> None:
+        import tempfile
+        from cether.vision import load_vision_config
+
+        path = Path(tempfile.mkdtemp()) / "vision.toml"
+        path.write_text(
+            '[vision]\nbase_url = "https://x.test/v1"\nmodel_id = "m-1"\nkey_env = "CETHER_TEST_KEY"\n',
+            encoding="utf-8",
+        )
+        cfg = load_vision_config(path, {"CETHER_TEST_KEY": "k-env"})
+        self.assertEqual((cfg.base_url, cfg.model_id, cfg.api_key), ("https://x.test/v1", "m-1", "k-env"))
+        self.assertEqual(load_vision_config(path, {}).api_key, "")
+
     def test_missing_key_raises_before_post(self) -> None:
         called = []
         cfg = VisionConfig(CFG.base_url, CFG.model_id, "")

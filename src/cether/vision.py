@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import base64
 import json
-from collections.abc import Callable
+import tomllib
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 Post = Callable[[str, dict, dict], dict]  # (url, json_body, headers) -> parsed JSON
 
@@ -46,6 +48,16 @@ def build_request(cfg: VisionConfig, png_bytes: bytes) -> tuple[str, dict, dict]
     headers = {"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json"}
     url = cfg.base_url.rstrip("/") + "/chat/completions"
     return url, body, headers
+
+
+def load_vision_config(path: Path, environ: Mapping[str, str]) -> VisionConfig:
+    """Read the [vision] table. The key comes from the environment, never from the file."""
+    raw = tomllib.loads(path.read_text(encoding="utf-8"))["vision"]
+    return VisionConfig(
+        base_url=str(raw["base_url"]),
+        model_id=str(raw["model_id"]),
+        api_key=environ.get(str(raw["key_env"]), ""),
+    )
 
 
 def describe(cfg: VisionConfig, png_bytes: bytes, post: Post) -> str:
