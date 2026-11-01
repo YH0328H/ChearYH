@@ -23,12 +23,15 @@ class L0Archive:
     def path(self) -> Path:
         return self._path
 
-    def append(self, text: str, source: str) -> str:
-        """Append one raw record and return its id."""
+    def append(self, text: str, source: str, weight: str = "normal") -> str:
+        """Append one raw record and return its id. `weight` is "normal" or "low"."""
+        if weight not in ("normal", "low"):
+            raise ValueError(f"unknown weight {weight!r}")
         record = {
             "id": uuid.uuid4().hex,
             "ts": datetime.now(timezone.utc).isoformat(),
             "source": source,
+            "weight": weight,
             "text": text,
         }
         line = json.dumps(record, ensure_ascii=False) + "\n"

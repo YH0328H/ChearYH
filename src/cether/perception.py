@@ -1,8 +1,9 @@
 """Screen perception: hash change detection, zero model calls when nothing changed.
 
 The capture function returns a small grayscale thumbnail. Only its average
-hash is kept, plus a short scene description when the screen changed. The
-raw capture is dropped after each tick and never written to disk.
+hash is kept. When the screen changed, the optional describer produces a
+short scene description. With no describer configured, the change is still
+logged with a null description, so the UI can show "未描述".
 
 Events go to an append-only world log tagged `self_world`.
 """
@@ -42,7 +43,7 @@ class Perceiver:
     def __init__(
         self,
         capture: Callable[[], Thumbnail],
-        describe: Callable[[], str],
+        describe: Callable[[], str] | None,
         world_log: Path,
         foreground_app: Callable[[], str],
         allow_apps: frozenset[str] = frozenset(),
@@ -75,10 +76,11 @@ class Perceiver:
             return False
         return True
 
+    def _can_capture(self) -> bool:
+        return not self._capture_paused and self._app_allowed(self._foreground_app())
+
     def tick(self) -> Tick:
-        if self._capture_paused:
-            return Tick(False, None, None)
-        if not self._app_allowed(self._foreground_app()):
+        if not self._can_capture():
             return Tick(False, None, None)
         thumb = self._capture()
         current = average_hash(thumb)
@@ -94,13 +96,29 @@ class Perceiver:
         self._last_hash = current
         if not changed:
             return Tick(False, None, distance)
+        return self._record(distance)
 
-        self.model_calls += 1
-        description = self._describe()
+    def look_now(self) -> Tick:
+        """One user-requested look. Describes even if the screen did not change.
+
+        Still blocked by the capture pause and the app filter.
+        """
+        if not self._can_capture():
+            return Tick(False, None, None)
+        thumb = self._capture()
+        self._last_hash = average_hash(thumb)
+        del thumb
+        return self._record(None)
+
+    def _record(self, distance: int | None) -> Tick:
+        description: str | None = None
+        if self._describe is not None:
+            self.model_calls += 1
+            description = self._describe()
         self._append_world(description)
         return Tick(True, description, distance)
 
-    def _append_world(self, description: str) -> None:
+    def _append_world(self, description: str | None) -> None:
         record = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "tags": ["self_world"],
