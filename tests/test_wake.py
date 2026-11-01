@@ -53,5 +53,21 @@ class WakeTests(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in self.dir.iterdir()), ["wake.json"])
 
 
+class RenderTests(unittest.TestCase):
+    def test_format_gap_units(self) -> None:
+        from cether.wake import format_gap
+        self.assertEqual(format_gap(30), "不到一分钟")
+        self.assertEqual(format_gap(5 * 60), "5 分钟")
+        self.assertEqual(format_gap(3 * 3600 + 10 * 60), "3 小时 10 分钟")
+        self.assertEqual(format_gap(2 * 86400), "2 天")
+        self.assertEqual(format_gap(86400 + 5 * 3600), "1 天 5 小时")
+
+    def test_render_includes_gap_and_snapshot(self) -> None:
+        from cether.wake import WakePayload, render_injection
+        text = render_injection(WakePayload(gap_seconds=3600, snapshot={"心情": "平静"}))
+        self.assertIn("1 小时", text)
+        self.assertIn("心情: 平静", text)
+
+
 if __name__ == "__main__":
     unittest.main()

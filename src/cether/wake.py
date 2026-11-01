@@ -21,6 +21,29 @@ class WakePayload:
     snapshot: dict
 
 
+def format_gap(seconds: float) -> str:
+    """Describe the time since close in plain Chinese, rounded down to the largest unit."""
+    minutes = int(seconds // 60)
+    if minutes < 1:
+        return "不到一分钟"
+    if minutes < 60:
+        return f"{minutes} 分钟"
+    hours, rem = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours} 小时" + (f" {rem} 分钟" if rem else "")
+    days, hours = divmod(hours, 24)
+    return f"{days} 天" + (f" {hours} 小时" if hours else "")
+
+
+def render_injection(payload: WakePayload) -> str:
+    """Text injected once on the first turn after wake. Gap is narrative only; it changes no state."""
+    snapshot_lines = "\n".join(f"- {k}: {v}" for k, v in payload.snapshot.items())
+    return (
+        f"距离上次关闭已过去 {format_gap(payload.gap_seconds)}。\n"
+        f"关闭前的记忆快照：\n{snapshot_lines}"
+    )
+
+
 class WakeState:
     def __init__(self, directory: Path) -> None:
         self._dir = directory
