@@ -7,6 +7,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from cether.state import (  # noqa: E402
     FourWill,
+    SixDrives,
     compute_surprise,
     inertial_filter,
     project_six_drives_to_four_will,
@@ -48,15 +49,29 @@ class InertialFilterTests(unittest.TestCase):
 
 class FourWillTests(unittest.TestCase):
     def test_six_drives_to_four_will_projection(self) -> None:
-        drives = {"curiosity": 0.8, "social": 0.6, "novelty": 0.3, "safety": 0.9}
-        will = project_six_drives_to_four_will(drives)
-        self.assertGreater(will.connection_desire, 0.5)  # High curiosity + social
-        self.assertGreater(will.security, 0.7)  # High safety
+        drives = SixDrives(seeking=0.8, affiliation=0.6, competence=0.7, certainty=0.9, care=0.5, play=0.4)
+        will = project_six_drives_to_four_will(drives, social_battery_current=0.75)
+        # connection_desire = affiliation*0.7 + care*0.3 = 0.6*0.7 + 0.5*0.3 = 0.42 + 0.15 = 0.57
+        self.assertAlmostEqual(will.connection_desire, 0.57, places=2)
+        # expression_impulse = seeking*0.4 + competence*0.4 + play*0.2 = 0.8*0.4 + 0.7*0.4 + 0.4*0.2 = 0.68
+        self.assertAlmostEqual(will.expression_impulse, 0.68, places=2)
+        # security = certainty*0.8 - seeking*0.2 = 0.9*0.8 - 0.8*0.2 = 0.72 - 0.16 = 0.56
+        self.assertAlmostEqual(will.security, 0.56, places=2)
+        self.assertEqual(will.social_battery, 0.75)
 
     def test_default_drives_give_moderate_will(self) -> None:
-        will = project_six_drives_to_four_will({})
+        drives = SixDrives()  # All defaults = 0.5
+        will = project_six_drives_to_four_will(drives)
         self.assertGreater(will.connection_desire, 0.0)
         self.assertLess(will.connection_desire, 1.0)
+
+    def test_high_seeking_reduces_security(self) -> None:
+        high_seeking = SixDrives(seeking=0.9, certainty=0.5)
+        low_seeking = SixDrives(seeking=0.1, certainty=0.5)
+        will_high = project_six_drives_to_four_will(high_seeking)
+        will_low = project_six_drives_to_four_will(low_seeking)
+        # High seeking should reduce security more
+        self.assertLess(will_high.security, will_low.security)
 
 
 class TextureTests(unittest.TestCase):

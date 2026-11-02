@@ -4,6 +4,12 @@ State dimensions are extensible. Default template provides four-will (social bat
 connection desire, expression impulse, security), but role cards can customize dimensions.
 
 State→behavior mapping is injected via persona prompts, not hardcoded logic.
+
+Theoretical foundations:
+- PSI theory (Dörner): activation, competence, uncertainty resolution, needs (affiliation, certainty)
+- SDT (Self-Determination Theory): autonomy, competence, relatedness
+- Panksepp's affective systems: SEEKING, CARE, PANIC/GRIEF, PLAY
+- The Synthetic Mind: Hull drive theory modernized, intrinsic curiosity (prediction error)
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ def compute_surprise(new_text: str, recent_texts: list[str]) -> float:
     """Compute surprise score as 1 - average Jaccard similarity.
 
     Higher surprise → higher initial weight for the new memory.
+    Based on intrinsic curiosity (prediction error-driven) from The Synthetic Mind.
     """
     if not recent_texts:
         return 1.0
@@ -57,34 +64,52 @@ def inertial_filter(current: float, target: float, alpha: float = 0.7) -> float:
 
 
 @dataclass
-class FourWill:
-    """Default four-will template: social battery, connection desire, expression impulse, security."""
-    social_battery: float  # 0.0-1.0, depleted by expression, restored by rest
-    connection_desire: float  # 0.0-1.0, want to be close
-    expression_impulse: float  # 0.0-1.0, want to speak
-    security: float  # 0.0-1.0, feel safe
+class SixDrives:
+    """Six core drives inspired by PSI, SDT, Panksepp, and The Synthetic Mind.
 
-
-def project_six_drives_to_four_will(drives: dict[str, float]) -> FourWill:
-    """Project six-dimension drives to four-will via configurable weight matrix.
-
-    Default mapping (can be overridden by role card):
-    - social_battery = base - expression_cost
-    - connection_desire = curiosity*0.3 + social*0.7
-    - expression_impulse = curiosity*0.5 + social*0.3 + novelty*0.2
-    - security = safety*0.8 + familiarity*0.2
+    Each drive ranges 0.0-1.0 and represents a motivational force.
     """
-    # This is a placeholder mapping; real mapping should come from config
-    curiosity = drives.get("curiosity", 0.5)
-    social = drives.get("social", 0.5)
-    novelty = drives.get("novelty", 0.5)
-    safety = drives.get("safety", 0.5)
+    seeking: float = 0.5  # SEEKING (Panksepp): exploration, curiosity, anticipation
+    affiliation: float = 0.5  # PSI affiliation + SDT relatedness: need for connection
+    competence: float = 0.5  # PSI competence + SDT competence: need for mastery and effectiveness
+    certainty: float = 0.5  # PSI uncertainty resolution: need for predictability and control
+    care: float = 0.5  # CARE (Panksepp): nurturing, empathy, protective impulse
+    play: float = 0.5  # PLAY (Panksepp): joy, lightness, social engagement without stakes
 
+
+@dataclass
+class FourWill:
+    """Default four-will template: social battery, connection desire, expression impulse, security.
+
+    Projected from six drives via weighted mapping inspired by PSI/SDT/Panksepp integration.
+    """
+    social_battery: float  # 0.0-1.0, depleted by expression, restored by rest (energy/activation)
+    connection_desire: float  # 0.0-1.0, want to be close (affiliation + care)
+    expression_impulse: float  # 0.0-1.0, want to speak (seeking + competence)
+    security: float  # 0.0-1.0, feel safe (certainty + inverse of uncertainty)
+
+
+def project_six_drives_to_four_will(drives: SixDrives, social_battery_current: float = 0.8) -> FourWill:
+    """Project six-dimension drives to four-will via weighted mapping.
+
+    Mapping inspired by PSI/SDT/Panksepp integration:
+    - social_battery: maintained separately (energy/activation level, not derived from drives)
+    - connection_desire: affiliation (primary) + care (secondary)
+    - expression_impulse: seeking (exploration) + competence (mastery) + play (lightness)
+    - security: certainty (predictability) - seeking (novelty inversely correlates with safety)
+
+    Args:
+        drives: Six-dimensional drive state
+        social_battery_current: Current energy level (maintained separately)
+
+    Returns:
+        Four-will projection
+    """
     return FourWill(
-        social_battery=0.8,  # Placeholder, should come from state history
-        connection_desire=curiosity * 0.3 + social * 0.7,
-        expression_impulse=curiosity * 0.5 + social * 0.3 + novelty * 0.2,
-        security=safety * 0.8 + (1.0 - novelty) * 0.2,  # Familiarity = 1 - novelty
+        social_battery=social_battery_current,  # Passed in, not computed from drives
+        connection_desire=drives.affiliation * 0.7 + drives.care * 0.3,
+        expression_impulse=drives.seeking * 0.4 + drives.competence * 0.4 + drives.play * 0.2,
+        security=drives.certainty * 0.8 - drives.seeking * 0.2,  # High seeking reduces security
     )
 
 
@@ -126,3 +151,4 @@ def translate_to_texture(dimension: str, value: float) -> str:
             return "有点不安"
     else:
         return f"{dimension}={value:.2f}"
+
