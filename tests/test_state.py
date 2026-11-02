@@ -9,9 +9,11 @@ from cether.state import (  # noqa: E402
     FourWill,
     SixDrives,
     compute_surprise,
+    ebbinghaus_decay,
     inertial_filter,
     project_six_drives_to_four_will,
     translate_to_texture,
+    weibull_decay,
 )
 
 
@@ -86,6 +88,41 @@ class TextureTests(unittest.TestCase):
     def test_unknown_dimension_returns_numeric(self) -> None:
         texture = translate_to_texture("unknown", 0.5)
         self.assertIn("0.50", texture)
+
+
+class DecayTests(unittest.TestCase):
+    def test_ebbinghaus_decay_at_zero_time_is_unchanged(self) -> None:
+        weight = ebbinghaus_decay(initial_weight=1.0, elapsed_seconds=0, tau=86400 * 7)
+        self.assertAlmostEqual(weight, 1.0)
+
+    def test_ebbinghaus_decay_at_one_tau_is_one_over_e(self) -> None:
+        import math
+        weight = ebbinghaus_decay(initial_weight=1.0, elapsed_seconds=86400 * 7, tau=86400 * 7)
+        self.assertAlmostEqual(weight, 1.0 / math.e, places=5)
+
+    def test_ebbinghaus_decay_reduces_weight_over_time(self) -> None:
+        weight_day1 = ebbinghaus_decay(1.0, elapsed_seconds=86400, tau=86400 * 7)
+        weight_day7 = ebbinghaus_decay(1.0, elapsed_seconds=86400 * 7, tau=86400 * 7)
+        weight_day14 = ebbinghaus_decay(1.0, elapsed_seconds=86400 * 14, tau=86400 * 7)
+        self.assertGreater(weight_day1, weight_day7)
+        self.assertGreater(weight_day7, weight_day14)
+
+    def test_weibull_decay_at_zero_time_is_unchanged(self) -> None:
+        weight = weibull_decay(initial_weight=1.0, elapsed_seconds=0)
+        self.assertAlmostEqual(weight, 1.0)
+
+    def test_weibull_decay_reduces_weight_over_time(self) -> None:
+        weight_day1 = weibull_decay(1.0, elapsed_seconds=86400)
+        weight_day7 = weibull_decay(1.0, elapsed_seconds=86400 * 7)
+        self.assertGreater(weight_day1, weight_day7)
+
+    def test_weibull_with_k_less_than_1_decays_fast_initially(self) -> None:
+        # k=0.8: fast initial decay
+        weight_day1_fast = weibull_decay(1.0, elapsed_seconds=86400, k=0.8)
+        # k=1.0: exponential (slower initial)
+        weight_day1_exp = weibull_decay(1.0, elapsed_seconds=86400, k=1.0)
+        # Fast decay should have lower weight after 1 day
+        self.assertLess(weight_day1_fast, weight_day1_exp)
 
 
 if __name__ == "__main__":

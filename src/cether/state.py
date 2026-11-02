@@ -152,3 +152,47 @@ def translate_to_texture(dimension: str, value: float) -> str:
     else:
         return f"{dimension}={value:.2f}"
 
+
+def ebbinghaus_decay(initial_weight: float, elapsed_seconds: float, tau: float = 86400 * 7) -> float:
+    """Ebbinghaus forgetting curve: exponential decay over time.
+
+    w(t) = w0 * exp(-Δt / τ)
+
+    Args:
+        initial_weight: Starting weight (0.0-1.0)
+        elapsed_seconds: Time since creation
+        tau: Time constant in seconds (default: 7 days = 604800 seconds)
+             High-weight memories use larger tau (slower decay)
+             Low-weight memories use smaller tau (faster decay)
+
+    Returns:
+        Decayed weight
+    """
+    import math
+    return initial_weight * math.exp(-elapsed_seconds / tau)
+
+
+def weibull_decay(initial_weight: float, elapsed_seconds: float, lambda_param: float = 1.0 / (86400 * 7),
+                  k: float = 0.8) -> float:
+    """Weibull decay: more flexible than exponential, fast initial decay then gradual.
+
+    w(t) = w0 * exp(-(λt)^k)
+
+    Weibull is preferred over pure Ebbinghaus for realistic forgetting:
+    - k < 1: fast initial decay, then slower (matches human memory better)
+    - k = 1: reduces to exponential (same as Ebbinghaus)
+    - k > 1: slow initial decay, then faster
+
+    Args:
+        initial_weight: Starting weight (0.0-1.0)
+        elapsed_seconds: Time since creation
+        lambda_param: Decay rate parameter (default: 1/week)
+        k: Shape parameter (default: 0.8, fast initial decay)
+
+    Returns:
+        Decayed weight
+    """
+    import math
+    return initial_weight * math.exp(-((lambda_param * elapsed_seconds) ** k))
+
+
