@@ -153,6 +153,91 @@ class VectorRetrieval:
         return [RetrievalResult(doc_id, score) for doc_id, score in ranked[:top_k]]
 
 
+@dataclass(frozen=True)
+class GraphNode:
+    """One node in the knowledge graph."""
+    id: str
+    entity: str
+    doc_ids: list[str]  # Documents where this entity appears
+
+
+@dataclass(frozen=True)
+class GraphEdge:
+    """One edge between two entities (co-occurrence)."""
+    source: str  # entity name
+    target: str  # entity name
+    weight: float  # co-occurrence count
+
+
+class KnowledgeGraph:
+    """Simplified knowledge graph with co-occurrence edges for graph diffusion retrieval."""
+    def __init__(self, nodes: list[GraphNode], edges: list[GraphEdge]) -> None:
+        self._nodes = {node.entity: node for node in nodes}
+        self._edges: dict[str, list[GraphEdge]] = {}
+        for edge in edges:
+            if edge.source not in self._edges:
+                self._edges[edge.source] = []
+            self._edges[edge.source].append(edge)
+
+    def get_node(self, entity: str) -> GraphNode | None:
+        return self._nodes.get(entity)
+
+    def get_neighbors(self, entity: str) -> list[GraphEdge]:
+        """Return all edges from this entity."""
+        return self._edges.get(entity, [])
+
+    def diffuse(self, seed_entities: list[str], max_hops: int = 1) -> dict[str, float]:
+        """Diffuse from seed entities, return entity scores after max_hops.
+
+        Simplified diffusion: one-hop neighbors weighted by co-occurrence count.
+        Seed entities get score 1.0, neighbors get edge weight / total_out_weight.
+        """
+        scores = {entity: 1.0 for entity in seed_entities}
+        visited = set(seed_entities)
+
+        for hop in range(max_hops):
+            next_layer = {}
+            for entity in list(scores.keys()):
+                if entity not in visited:
+                    continue
+                neighbors = self.get_neighbors(entity)
+                if not neighbors:
+                    continue
+                total_weight = sum(e.weight for e in neighbors)
+                for edge in neighbors:
+                    if edge.target not in scores:
+                        # Neighbor score = parent score * edge weight / total out-weight
+                        next_layer[edge.target] = scores[entity] * (edge.weight / total_weight)
+            scores.update(next_layer)
+            visited.update(next_layer.keys())
+
+        return scores
+
+
+class GraphRetrieval:
+    """Graph diffusion retrieval: diffuse from seed entities, collect document IDs."""
+    def __init__(self, graph: KnowledgeGraph) -> None:
+        self._graph = graph
+
+    def search(self, seed_entities: list[str], top_k: int = 10, max_hops: int = 1) -> list[RetrievalResult]:
+        """Diffuse from seed entities, rank documents by aggregated entity scores."""
+        entity_scores = self._graph.diffuse(seed_entities, max_hops)
+
+        # Aggregate scores by document: sum entity scores for all entities in each doc
+        doc_scores: dict[str, float] = {}
+        for entity, score in entity_scores.items():
+            node = self._graph.get_node(entity)
+            if node is None:
+                continue
+            for doc_id in node.doc_ids:
+                if doc_id not in doc_scores:
+                    doc_scores[doc_id] = 0.0
+                doc_scores[doc_id] += score
+
+        ranked = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)
+        return [RetrievalResult(doc_id, score) for doc_id, score in ranked[:top_k]]
+
+
 def rrf_fusion(results_list: list[list[RetrievalResult]], k: int = 60) -> list[RetrievalResult]:
     """Reciprocal Rank Fusion: combine multiple ranked lists into one.
 

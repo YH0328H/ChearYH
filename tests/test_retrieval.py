@@ -11,6 +11,10 @@ from cether.retrieval import (  # noqa: E402
     Document,
     EmbeddingConfig,
     EmbeddingError,
+    GraphEdge,
+    GraphNode,
+    GraphRetrieval,
+    KnowledgeGraph,
     RetrievalResult,
     VectorDocument,
     VectorRetrieval,
@@ -120,6 +124,47 @@ class VectorTests(unittest.TestCase):
         results = retrieval.search([1.0, 0.0, 0.0], top_k=3)
         self.assertEqual(results[0].doc_id, "1")
         self.assertGreater(results[0].score, results[2].score)
+
+
+class GraphTests(unittest.TestCase):
+    def test_graph_diffusion_one_hop(self) -> None:
+        nodes = [
+            GraphNode("n1", "天气", ["doc1"]),
+            GraphNode("n2", "下雨", ["doc2"]),
+            GraphNode("n3", "晴天", ["doc3"]),
+        ]
+        edges = [
+            GraphEdge("天气", "下雨", 3.0),
+            GraphEdge("天气", "晴天", 1.0),
+        ]
+        graph = KnowledgeGraph(nodes, edges)
+        scores = graph.diffuse(["天气"], max_hops=1)
+        # Seed entity gets 1.0
+        self.assertEqual(scores["天气"], 1.0)
+        # Neighbors weighted by edge weight / total out-weight
+        # total = 3.0 + 1.0 = 4.0
+        # 下雨: 1.0 * 3.0/4.0 = 0.75
+        # 晴天: 1.0 * 1.0/4.0 = 0.25
+        self.assertAlmostEqual(scores["下雨"], 0.75)
+        self.assertAlmostEqual(scores["晴天"], 0.25)
+
+    def test_graph_retrieval_ranks_docs_by_entity_scores(self) -> None:
+        nodes = [
+            GraphNode("n1", "天气", ["doc1", "doc2"]),
+            GraphNode("n2", "下雨", ["doc2"]),
+        ]
+        edges = [GraphEdge("天气", "下雨", 1.0)]
+        graph = KnowledgeGraph(nodes, edges)
+        retrieval = GraphRetrieval(graph)
+        results = retrieval.search(["天气"], top_k=2, max_hops=1)
+        # doc2 contains both 天气(1.0) and 下雨(0.5), should rank first
+        self.assertEqual(results[0].doc_id, "doc2")
+
+    def test_graph_empty_seeds_returns_empty(self) -> None:
+        graph = KnowledgeGraph([], [])
+        retrieval = GraphRetrieval(graph)
+        results = retrieval.search([], top_k=10)
+        self.assertEqual(results, [])
 
 
 if __name__ == "__main__":
