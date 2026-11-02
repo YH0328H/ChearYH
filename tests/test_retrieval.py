@@ -1,11 +1,24 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from cether.retrieval import BM25, Document, RetrievalResult, rrf_fusion  # noqa: E402
+from cether.retrieval import (  # noqa: E402
+    BM25,
+    Document,
+    EmbeddingConfig,
+    EmbeddingError,
+    RetrievalResult,
+    VectorDocument,
+    VectorRetrieval,
+    cosine_similarity,
+    embed_text,
+    load_embedding_config,
+    rrf_fusion,
+)
 
 
 class BM25Tests(unittest.TestCase):
@@ -55,5 +68,60 @@ class RRFTests(unittest.TestCase):
         self.assertEqual(fused, [])
 
 
+class EmbeddingTests(unittest.TestCase):
+    def test_embed_text_returns_vector(self) -> None:
+        cfg = EmbeddingConfig("https://x.test/v1", "m-1", "k-test", 1024)
+        seen = []
+
+        def post(url, body, headers):
+            seen.append((url, body["model"]))
+            return {"data": [{"embedding": [0.1] * 1024}]}
+
+        vector = embed_text(cfg, "test", post)
+        self.assertEqual(len(vector), 1024)
+        self.assertEqual(seen, [("https://x.test/v1/embeddings", "m-1")])
+
+    def test_embed_missing_key_raises(self) -> None:
+        cfg = EmbeddingConfig("https://x.test/v1", "m-1", "", 1024)
+        with self.assertRaises(EmbeddingError):
+            embed_text(cfg, "test", lambda u, b, h: {})
+
+    def test_embed_wrong_dimensions_raises(self) -> None:
+        cfg = EmbeddingConfig("https://x.test/v1", "m-1", "k-test", 1024)
+        with self.assertRaises(EmbeddingError):
+            embed_text(cfg, "test", lambda u, b, h: {"data": [{"embedding": [0.1] * 512}]})
+
+    def test_load_embedding_config(self) -> None:
+        path = Path(tempfile.mkdtemp()) / "embedding.toml"
+        path.write_text(
+            '[embedding]\nbase_url = "https://y.test"\nmodel_id = "m-2"\nkey_env = "TEST_KEY"\ndimensions = 512\n',
+            encoding="utf-8",
+        )
+        cfg = load_embedding_config(path, {"TEST_KEY": "k-env"})
+        self.assertEqual((cfg.base_url, cfg.model_id, cfg.api_key, cfg.dimensions),
+                         ("https://y.test", "m-2", "k-env", 512))
+
+
+class VectorTests(unittest.TestCase):
+    def test_cosine_similarity(self) -> None:
+        a = [1.0, 0.0, 0.0]
+        b = [1.0, 0.0, 0.0]
+        self.assertAlmostEqual(cosine_similarity(a, b), 1.0)
+        c = [0.0, 1.0, 0.0]
+        self.assertAlmostEqual(cosine_similarity(a, c), 0.0)
+
+    def test_vector_search_ranks_by_similarity(self) -> None:
+        docs = [
+            VectorDocument("1", "天气", [1.0, 0.0, 0.0]),
+            VectorDocument("2", "下雨", [0.9, 0.1, 0.0]),
+            VectorDocument("3", "火星", [0.0, 0.0, 1.0]),
+        ]
+        retrieval = VectorRetrieval(docs)
+        results = retrieval.search([1.0, 0.0, 0.0], top_k=3)
+        self.assertEqual(results[0].doc_id, "1")
+        self.assertGreater(results[0].score, results[2].score)
+
+
 if __name__ == "__main__":
     unittest.main()
+

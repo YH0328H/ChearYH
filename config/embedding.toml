@@ -1,0 +1,8 @@
+# Embedding 槽位（向量化）。Key 不写在这里,只写环境变量名。
+# 与 CONFIG_FORM.md 第 2 节「Embedding（向量）」保持一致。
+
+[embedding]
+base_url = "https://api.siliconflow.cn/v1"
+model_id = "BAAI/bge-m3"
+key_env = "CETHER_EMBED_API_KEY"
+dimensions = 1024
