@@ -36,7 +36,6 @@
 
 ### 未完成任务（第二批剩余）
 
-- ⏳ 上下文预算裁切（按优先级硬裁：人格>硬边界>状态>关系>心事匣>召回）
 - ⏳ 张力态涌现（多维区间判定，如：连接渴望>0.7且安全感<0.4="想靠近但不敢"）
 
 ## 2026-11-04 (周三)
@@ -48,6 +47,16 @@
 - ✅ 新建 `tests/test_window.py`（22条用例）：TOML加载校验（含未知mode/skew越界报错）、`active_mode`跨午夜窗口环绕、`checkpoint_block_reason`五级优先级链（sleeping>silent_mode>outside_window>hourly_cap>None）、挫败系数边界（1次不触发/2次触发/3次不叠加）、分布形态统计验证（固定间隔均值右偏、随机间隔中位数贴近基准、自定义偏移双向且在幅度范围内）。
 - ✅ ALGORITHMS.md 挫败冷却/随机抖动状态 ⏳→✅。
 - ✅ 全量回归：`pytest tests -v` **148 passed**，无回归。
+
+### 任务2完成：上下文预算优先级裁决
+
+对齐 TASK.md 新增 7.8 / 验收 32。新建模块：
+
+- ✅ `src/cether/context_budget.py`：`BudgetConfig`（7段字符预算，TOML可加载）、`ContextSegment`（category+text+timestamp）、`allocate_budget()`（按优先级 人格锚点>硬边界>状态质地>关系摘要>心事匣>召回记忆>会话续接摘要 裁决，段位预算互不借用，同级按timestamp近者优先，超预算片段整段裁剪不做字符级截断）、`BudgetResult`/`BudgetDecision` 提供可观测裁决记录。
+- ✅ `config/context_budget.toml`：7段预算默认值（人格锚点400/硬边界200/状态质地150/关系摘要300/心事匣250/召回记忆600/会话续接200字符）。
+- ✅ `tests/test_context_budget.py`（13条用例）：TOML加载、未知category报错、核心验收场景（高低优先级同时超预算→低优先级被裁高优先级完整保留）、预算不互相借用、同级时间近者优先、整段裁剪不做半句截断、裁决可观测、输出按优先级排序、渲染拼接顺序。
+- ✅ ALGORITHMS.md 上下文预算裁切状态 ⏳→✅。
+- ✅ 全量回归：`pytest tests -v` **161 passed**，无回归。
 
 ### 测试覆盖
 

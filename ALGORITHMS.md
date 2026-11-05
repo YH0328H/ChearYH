@@ -87,14 +87,11 @@
 | **随机抖动** | ✅ | 固定间隔三角分布偏右(skew_low/high/mode可配)，随机间隔对数正态(lognormvariate)，自定义偏移±120-300s双向 | `window.py::next_fixed_interval/next_random_interval/custom_time_offset` |
 | **挫败冷却** | ✅ | 连续两次未回应→下次间隔×frustration_factor(1.5)，不随次数继续叠加；计数重置由调用方负责 | `window.py::_frustrated` |
 
-### 待实现
-| 算法 | 优先级 | 作用 | 预计工作量 |
-|------|--------|------|------------|
-| **上下文预算裁切** | 高 | 按优先级硬裁：人格>硬边界>状态>关系>心事匣>召回 | 2小时 |
+| **上下文预算裁切** | ✅ | 单轮注入预算按优先级（人格锚点>硬边界>状态质地>关系摘要>心事匣>召回记忆>会话续接摘要）硬裁，段位预算互不借用，同级按时间近者优先 | `context_budget.py::allocate_budget` |
 
 **说明**：
 - 随机抖动/挫败冷却：代码已在 `window.py` 实现并有 `config/window.toml` 配置支持，2026-11-04 补齐 `tests/test_window.py`（22条用例）验证，含TOML加载校验、`active_mode`跨午夜窗口、`checkpoint_block_reason`优先级链、挫败系数触发边界、分布形态采样验证。
-- 上下文裁切：Token预算按优先级分段，硬截断低优先级内容
+- 上下文裁切：字符预算按优先级分段（对齐 TASK.md 新增 7.8），每段独立配额不互相借用，超预算片段整段裁剪而非字符级截断（避免半句话注入），裁决结果通过 `BudgetDecision` 列表可观测；`tests/test_context_budget.py`（13条用例）验证高低优先级同时超预算场景（对应 TASK.md 新增验收 32）。
 
 ## 五、感知与底层对比算法
 
