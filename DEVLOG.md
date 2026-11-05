@@ -142,4 +142,13 @@
 
 ### 后续
 
-先审查并补全角色包导入冲突与持久化/崩溃恢复边界，再将 roles/UI 契约接入实际运行时；之后串联 `runner.py` 主循环，最后实现 Tauri 视觉层并进行端到端验证。
+### 主循环：运行时闭环编排
+
+- ✅ 扩展 `src/cether/runner.py`：新增 `RuntimePipeline`、`RuntimeSteps`、`RuntimeContext`、`RuntimeEvent` 与 `RuntimeReport`。前台阶段按“感知→L0→触发判定→条件式L1→状态→决策→表达→结果回流”顺序串联；未触发时跳过叙事生成。
+- ✅ 每个阶段前检查角色 scope；拒绝并发 tick；停止请求在当前轮次结束后生效；后台睡眠巩固、反思校准、检索偏置更新在前台完成后执行，错误产生可观测事件并默认不阻断轮次。
+- ✅ 保留既有 `build_perceiver` 与 `run_loop` 接口兼容。
+- ✅ 扩展 `tests/test_runner.py` 覆盖阶段顺序、L1跳过、scope复核/阻断、后台错误隔离、停止与并发约束；专项测试 15 passed，全量 `pytest tests -q --tb=short`：276 passed。
+
+### 后续
+
+将 pipeline 的步骤适配到真实感知、记忆、状态、决策和表达服务，并以事件/队列方式运行耗时后台任务；完成角色切换与主循环生命周期联动后，再做 Tauri IPC、视觉层和端到端验证。

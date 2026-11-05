@@ -7,7 +7,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from cether.runner import build_perceiver, run_loop  # noqa: E402
+from cether.runner import (  # noqa: E402
+    RuntimeConfig,
+    RuntimePipeline,
+    RuntimeSteps,
+    build_perceiver,
+    run_loop,
+)
 from cether.vision import VisionError  # noqa: E402
 
 VISION_TOML = (
@@ -24,6 +30,17 @@ def frame(bright: int) -> list[int]:
 
 def reply(text: str) -> dict:
     return {"choices": [{"message": {"content": text}}]}
+
+
+class FakeScopeGuard:
+    def __init__(self, active="role-a"):
+        self.active = active
+        self.checks = []
+
+    def ensure_role_scope(self, scope_id):
+        self.checks.append(scope_id)
+        if scope_id != self.active:
+            raise RuntimeError("scope mismatch")
 
 
 class RunnerTests(unittest.TestCase):
@@ -108,6 +125,101 @@ class RunnerTests(unittest.TestCase):
         p, _ = self._build([], lambda u, b, h: reply("x"))
         with self.assertRaises(ValueError):
             run_loop(p, 0, should_stop=lambda: True)
+
+    def _pipeline(self, calls, *, trigger=True, scope=None, background=None):
+        def step(name, value=None):
+            def run(*args):
+                calls.append(name)
+                if name == "should_trigger_l1":
+                    return trigger
+                if name == "sleep_consolidation" and isinstance(background, Exception):
+                    raise background
+                return value if value is not None else name
+            return run
+
+        steps = RuntimeSteps(
+            perceive=step("perceive", {"event": "screen"}),
+            append_l0=step("append_l0", "l0-1"),
+            should_trigger_l1=step("should_trigger_l1"),
+            generate_l1=step("generate_l1", {"narrative": "story"}),
+            update_state=step("update_state", {"mood": 0.2}),
+            decide=step("decide", {"speak": True}),
+            express=step("express", "hello"),
+            feed_result=step("feed_result", "fed"),
+            sleep_consolidation=step("sleep_consolidation", "consolidated") if background is not None else None,
+            reflection_calibration=step("reflection_calibration", "reflected") if background is not None else None,
+            retrieval_bias_update=step("retrieval_bias_update", "biased") if background is not None else None,
+        )
+        return RuntimePipeline(
+            role_scope="role-a", scope_guard=scope or FakeScopeGuard(), steps=steps,
+            config=RuntimeConfig(interval_seconds=0.25),
+        )
+
+    def test_pipeline_runs_foreground_stages_in_contract_order(self) -> None:
+        calls = []
+        context = self._pipeline(calls).tick()
+        self.assertEqual(calls, [
+            "perceive", "append_l0", "should_trigger_l1", "generate_l1", "update_state",
+            "decide", "express", "feed_result",
+        ])
+        self.assertEqual(context.l0_id, "l0-1")
+        self.assertEqual(context.narrative, {"narrative": "story"})
+        self.assertEqual(context.result, "fed")
+
+    def test_pipeline_skips_l1_without_explicit_trigger(self) -> None:
+        calls = []
+        context = self._pipeline(calls, trigger=False).tick()
+        self.assertNotIn("generate_l1", calls)
+        self.assertIsNone(context.narrative)
+        self.assertIn("update_state", calls)
+
+    def test_pipeline_rechecks_role_scope_for_every_stage(self) -> None:
+        calls = []
+        guard = FakeScopeGuard()
+        pipeline = self._pipeline(calls, scope=guard)
+        pipeline.tick()
+        self.assertEqual(len(guard.checks), len(calls) + 1)
+        self.assertTrue(all(scope == "role-a" for scope in guard.checks))
+
+    def test_pipeline_scope_failure_blocks_all_domain_work(self) -> None:
+        calls = []
+        guard = FakeScopeGuard(active="role-b")
+        with self.assertRaisesRegex(RuntimeError, "scope mismatch"):
+            self._pipeline(calls, scope=guard).tick()
+        self.assertEqual(calls, [])
+
+    def test_background_failures_are_recorded_without_failing_tick(self) -> None:
+        calls = []
+        context = self._pipeline(calls, background=RuntimeError("sleep store unavailable")).tick()
+        self.assertEqual(context.result, "fed")
+        self.assertIsNone(context.background_results["sleep_consolidation"])
+        pipeline = self._pipeline([], background=RuntimeError("sleep store unavailable"))
+        context = pipeline.tick()
+        self.assertTrue(any(e.stage == "sleep_consolidation" and e.status == "error" for e in pipeline._events))
+
+    def test_run_honors_max_ticks_and_sleeps_only_between_ticks(self) -> None:
+        calls = []
+        slept = []
+        report = self._pipeline(calls).run(max_ticks=2, sleep=slept.append)
+        self.assertEqual(report.ticks, 2)
+        self.assertEqual(report.stopped_reason, "max_ticks")
+        self.assertEqual(slept, [0.25])
+
+    def test_stop_request_prevents_future_ticks(self) -> None:
+        calls = []
+        pipeline = self._pipeline(calls)
+        pipeline.stop()
+        report = pipeline.run(max_ticks=2, sleep=lambda _s: None)
+        self.assertEqual(report.ticks, 0)
+        with self.assertRaisesRegex(RuntimeError, "runtime is stopping"):
+            pipeline.tick()
+
+    def test_rejects_overlapping_ticks(self) -> None:
+        calls = []
+        pipeline = self._pipeline(calls)
+        pipeline._stage_active = True
+        with self.assertRaisesRegex(RuntimeError, "concurrent runtime ticks"):
+            pipeline.tick()
 
 
 if __name__ == "__main__":
