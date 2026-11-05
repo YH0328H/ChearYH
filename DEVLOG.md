@@ -36,9 +36,18 @@
 
 ### 未完成任务（第二批剩余）
 
-- ⏳ 挫败冷却（连续未回应→间隔后移 50%）
 - ⏳ 上下文预算裁切（按优先级硬裁：人格>硬边界>状态>关系>心事匣>召回）
 - ⏳ 张力态涌现（多维区间判定，如：连接渴望>0.7且安全感<0.4="想靠近但不敢"）
+
+## 2026-11-04 (周三)
+
+### 任务1完成：挫败冷却 + 随机抖动（测试补齐）
+
+开发前核查发现 `window.py` 中 `next_fixed_interval`/`next_random_interval`/`_frustrated`/`custom_time_offset` 已完整实现挫败冷却（连续≥2次未回应→间隔×1.5，不随次数叠加）与随机抖动（固定间隔三角分布偏右、随机间隔对数正态、自定义偏移双向），`config/window.toml` 配置齐备，仅缺单元测试覆盖。
+
+- ✅ 新建 `tests/test_window.py`（22条用例）：TOML加载校验（含未知mode/skew越界报错）、`active_mode`跨午夜窗口环绕、`checkpoint_block_reason`五级优先级链（sleeping>silent_mode>outside_window>hourly_cap>None）、挫败系数边界（1次不触发/2次触发/3次不叠加）、分布形态统计验证（固定间隔均值右偏、随机间隔中位数贴近基准、自定义偏移双向且在幅度范围内）。
+- ✅ ALGORITHMS.md 挫败冷却/随机抖动状态 ⏳→✅。
+- ✅ 全量回归：`pytest tests -v` **148 passed**，无回归。
 
 ### 测试覆盖
 
