@@ -87,11 +87,39 @@
 - **总提交数**: 约 45 个
 - **工作目录**: 干净（无未提交文件）
 
+## 2026-11-05 (周四)
+
+**工作时间**: 约 2 小时（12:00-13:20，接续前日第二批收尾）
+
+### 第三批：锦上添花算法（全部完成）
+
+摸底发现反刍抑制（`multipliers.py::rumination_multiplier`）与随机抖动（`window.py`）此前已随其他任务一并实现，本次实际新写三项：
+
+#### 1. 六位特征编码/六十四卦惩罚
+- ✅ 新建 `src/cether/hexbit.py`：`DIMENSION_NAMES` 定义6个显式语义维度（valence_positive/high_salience/high_emotion/relation_event/self_initiated/flash_weight，全部取自项目既有状态/记忆字段，不新造维度）；`encode_six_bits` 按6维编码为0-63整数，禁止随机哈希，同输入恒定输出；`apply_hexbit_penalty` 连续相同编码递减惩罚 `score × decay_factor^repeat_count`（默认0.85），编码切换即重置计数。
+- ✅ 新建 `tests/test_hexbit.py`（13条用例）：编码边界、自定义判定函数覆盖、连续惩罚递减、顺序保持。
+
+#### 2. Jaccard相似度合并（数字保护+闪光灯排除）
+- ✅ 新建 `src/cether/dedup.py`：`jaccard_similarity`/`extract_numbers`/`numbers_conflict`（数字集合不同即禁止合并，对齐 TASK.md 48）；`decide_merge` 按优先级判定：闪光灯节点优先于数字冲突检查，永不合并→数字冲突禁止合并→低于相似度阈值(默认0.8)不合并→否则合并；`merge_near_duplicates` 贪心两两比较去重，返回保留列表+全部判定记录（可观测）。
+- ✅ 新建 `tests/test_dedup.py`（15条用例）：数字保护阻止高相似合并、闪光灯优先级高于数字检查、链式合并、空输入边界。
+
+#### 3. 玻恩规则抽样（空闲动作分布）
+- ✅ 新建 `src/cether/idle.py`：`born_probabilities` 按 P(i)=|c_i|²/Σ|c_j|² 将振幅列表转概率分布，全零振幅兜底均分；`sample_action` 过滤低于阈值动作后累积概率轮盘抽样；`default_idle_amplitudes(social_battery, connection_desire, expression_impulse)` 从当前状态投影出"看书/发呆/搭话"三个默认动作振幅，投影权重语义可解释、可复算。
+- ✅ 新建 `tests/test_idle.py`（17条用例）：概率归一化、2000次采样验证分布匹配（P(a)≈0.9878）、阈值过滤、状态投影方向正确性。
+
+### 第三批收官
+
+反刍抑制、Jaccard相似度合并、随机抖动、六位特征编码、玻恩规则抽样全部完成，第三批任务结束。ALGORITHMS.md 一至四类算法清单除「空间索引巡游」（第四批，低优先级）外全部标记 ✅，同时修正了此前滞后未更新的第一批状态标记（惊讶度/惯性滤波/四意愿映射/质地翻译/艾宾浩斯衰减，代码早已完成但文档仍显示⏳）。
+
+### 测试覆盖
+
+- **测试数量**: 215 条（新增 45 条：hexbit 13 + dedup 15 + idle 17）
+- **通过率**: 100%，`pytest tests -v` 全量回归 215 passed，无回归
+- **新增模块**: `hexbit.py`、`dedup.py`、`idle.py`
+
 ### 下一步计划
 
-按第二批剩余任务继续：
-1. 挫败冷却（1小时）
-2. 上下文预算裁切（2小时）
-3. 张力态涌现（1.5小时）
+1. 第四批「空间索引巡游」（低优先级，v2.0可做）
+2. 或转向运行时整体联调、角色卡多角色支持等 TASK.md 其余章节
 
 然后进入第三批（反刍抑制、Jaccard 合并、随机抖动、六十四卦、玻恩规则）。
