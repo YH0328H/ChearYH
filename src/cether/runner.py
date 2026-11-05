@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+import threading
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -170,22 +171,45 @@ class RuntimePipeline:
         self._tick_id = 0
         self._events: list[RuntimeEvent] = []
         self._stage_active = False
+        self._lifecycle_lock = threading.Lock()
+        self._stage_lock = threading.Lock()
+        self._stage_idle = threading.Event()
+        self._stage_idle.set()
+        self._stage_thread: threading.Thread | None = None
+        self._was_sleeping = False
 
     @property
     def stop_requested(self) -> bool:
         return self._stop_requested
 
     def stop(self) -> None:
-        """Request a graceful stop after the current foreground tick."""
-        self._stop_requested = True
+        """Request cancellation; the current synchronous stage finishes, later ticks stop."""
+        with self._lifecycle_lock:
+            self._stop_requested = True
+
+    def cancel(self, timeout: float | None = None) -> bool:
+        """Stop scheduling work and wait for the active synchronous tick to finish."""
+        self.stop()
+        with self._lifecycle_lock:
+            current_tick_thread = self._stage_active and threading.current_thread() is self._stage_thread
+        if current_tick_thread:
+            return False
+        return self._stage_idle.wait(timeout)
 
     def tick(self) -> RuntimeContext:
         """Run one complete foreground tick, then best-effort background stages."""
-        if self._stop_requested:
-            raise RuntimeError("runtime is stopping")
-        if self._stage_active:
+        with self._lifecycle_lock:
+            if self._stop_requested:
+                raise RuntimeError("runtime is stopping")
+        if not self._stage_lock.acquire(blocking=False):
             raise RuntimeError("concurrent runtime ticks are forbidden")
-        self._stage_active = True
+        with self._lifecycle_lock:
+            if self._stop_requested:
+                self._stage_lock.release()
+                raise RuntimeError("runtime is stopping")
+            self._stage_active = True
+            self._stage_thread = threading.current_thread()
+            self._stage_idle.clear()
         self._tick_id += 1
         context = RuntimeContext(self._tick_id, self.role_scope, self._clock())
         try:
@@ -194,7 +218,11 @@ class RuntimePipeline:
             context = self._background(context)
             return context
         finally:
-            self._stage_active = False
+            with self._lifecycle_lock:
+                self._stage_active = False
+                self._stage_thread = None
+                self._stage_idle.set()
+            self._stage_lock.release()
 
     def run(
         self,
@@ -223,6 +251,14 @@ class RuntimePipeline:
 
     def _foreground(self, context: RuntimeContext) -> RuntimeContext:
         perception = self._run_stage(context, "perception", lambda: self._steps.perceive())
+        if getattr(perception, "sleeping", False) or (isinstance(perception, dict) and perception.get("sleeping")):
+            self._was_sleeping = True
+            self._emit(context, "sleep", "frozen", "sleep state freezes perception and foreground state evolution")
+            return _replace_context(context, perception=perception)
+        if self._was_sleeping:
+            self._was_sleeping = False
+            self._emit(context, "sleep", "wake", "sleep interval ended")
+            return _replace_context(context, perception=perception)
         context = _replace_context(context, perception=perception)
         l0_id = self._run_stage(context, "l0", lambda: self._steps.append_l0(perception))
         context = _replace_context(context, l0_id=l0_id)
@@ -242,11 +278,18 @@ class RuntimePipeline:
 
     def _background(self, context: RuntimeContext) -> RuntimeContext:
         outputs = dict(context.background_results)
-        for name, operation in (
-            ("sleep_consolidation", self._steps.sleep_consolidation),
-            ("reflection_calibration", self._steps.reflection_calibration),
-            ("retrieval_bias_update", self._steps.retrieval_bias_update),
-        ):
+        mode = getattr(context.perception, "sleep_mode", None)
+        if isinstance(context.perception, dict):
+            mode = context.perception.get("sleep_mode", mode)
+        if mode not in {"light", "deep"}:
+            return context
+        operations = [("sleep_consolidation", self._steps.sleep_consolidation)]
+        if mode == "deep":
+            operations.extend((
+                ("reflection_calibration", self._steps.reflection_calibration),
+                ("retrieval_bias_update", self._steps.retrieval_bias_update),
+            ))
+        for name, operation in operations:
             if operation is None:
                 continue
             try:

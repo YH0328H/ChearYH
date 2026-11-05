@@ -14,6 +14,7 @@ import shutil
 import threading
 import uuid
 import zipfile
+import hashlib
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -127,8 +128,16 @@ class RoleRegistry:
         self._active_id: str | None = None
         self._read_only_error = False
         self._switch_lock = threading.RLock()
+        self._task_cancellers: dict[str, list[Callable[[], None]]] = {}
         if registry_path.exists():
             self._load_registry()
+            for role_id in tuple(self._roles):
+                cfg = self._roles[role_id]
+                self._restore_workspace_snapshot(cfg)
+                self._validate_target(cfg)
+            if self._active_id is not None:
+                cfg = self._roles[self._active_id]
+                self._hooks.load(RoleContext(cfg, cfg.role_id))
 
     @property
     def active(self) -> RoleContext | None:
@@ -186,6 +195,18 @@ class RoleRegistry:
         self._save_registry()
         return cfg
 
+    def register_task_canceller(self, role_id: str, cancel: Callable[[], None]) -> Callable[[], None]:
+        """Register a role-owned task cancellation callback; return its unregister function."""
+        if role_id not in self._roles:
+            raise RoleError(f"unknown role: {role_id}")
+        callbacks = self._task_cancellers.setdefault(role_id, [])
+        callbacks.append(cancel)
+
+        def unregister() -> None:
+            if cancel in callbacks:
+                callbacks.remove(cancel)
+        return unregister
+
     def ensure_role_scope(self, scope_id: str) -> RoleContext:
         """Reject missing, archived or cross-role scopes without fallback."""
         active = self.active
@@ -215,12 +236,22 @@ class RoleRegistry:
         old = self.active
         if old is None:
             self._validate_target(target)
-            self._hooks.load(RoleContext(target, target.role_id))
-            wake = self._wake_for(target)
-            self._hooks.activate(RoleContext(target, target.role_id), wake)
-            self._active_id = target_id
-            self._save_registry()
-            return SwitchResult(target_id, wake, ())
+            try:
+                self._restore_workspace_snapshot(target)
+                self._hooks.load(RoleContext(target, target.role_id))
+                wake = self._wake_for(target)
+                self._hooks.activate(RoleContext(target, target.role_id), wake)
+                self._active_id = target_id
+                self._save_registry()
+                return SwitchResult(target_id, wake, ())
+            except Exception as exc:
+                try:
+                    self._hooks.rollback(RoleContext(target, target.role_id))
+                except Exception as rollback_exc:
+                    self._read_only_error = True
+                    raise RoleError(f"initial activation failed ({exc}); rollback failed ({rollback_exc})") from rollback_exc
+                self._active_id = None
+                raise RoleError(f"initial activation failed: {exc}") from exc
         if old.config.role_id == target_id:
             return SwitchResult(target_id, self._wake_for(target), ())
 
@@ -232,14 +263,21 @@ class RoleRegistry:
 
         committed = False
         try:
-            emit("persist_current", 1, "保存当前角色状态与快照")
-            self._hooks.persist(old)
-            WakeState(old.workspace).save_snapshot(self._snapshot(old), self._clock())
-            emit("cancel_tasks", 2, "取消并保存进行中任务")
+            emit("cancel_tasks", 1, "取消并保存进行中任务")
+            for cancel_task in tuple(self._task_cancellers.get(old.config.role_id, ())):
+                if cancel_task() is False:
+                    raise RoleError("role task cancellation timed out")
             self._hooks.cancel_and_persist_tasks(old)
+            emit("persist_current", 2, "保存当前角色状态与快照")
+            self._hooks.persist(old)
+            snapshot = self._snapshot(old)
+            wake_state = WakeState(old.workspace)
+            wake_state.save_snapshot(snapshot, self._clock())
+            self._commit_workspace_snapshot(old)
             emit("release_resources", 3, "释放当前角色资源")
             self._hooks.release_resources(old)
             emit("validate_target", 4, "校验目标工作区与状态")
+            self._restore_workspace_snapshot(target)
             self._validate_target(target)
             emit("load_target", 5, "加载目标角色配置与状态")
             new_context = RoleContext(target, target.role_id)
@@ -247,8 +285,13 @@ class RoleRegistry:
             wake = self._wake_for(target)
             emit("activate_target", 6, "执行唤醒注入并激活")
             self._hooks.activate(new_context, wake)
+            previous_id = self._active_id
             self._active_id = target_id
-            self._save_registry()
+            try:
+                self._save_registry()
+            except Exception:
+                self._active_id = previous_id
+                raise
             committed = True
             return SwitchResult(target_id, wake, tuple(events))
         except Exception as exc:
@@ -387,15 +430,65 @@ class RoleRegistry:
 
     @staticmethod
     def _snapshot(role: RoleContext) -> dict:
-        path = role.workspace / "state.json"
-        state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-        mind_path = role.workspace / "mind_box.json"
-        mind = json.loads(mind_path.read_text(encoding="utf-8")) if mind_path.exists() else []
-        return {"role_id": role.config.role_id, "state": state, "mind_box": mind}
+        names = ("state.json", "mind_box.json", "candidates.json", "wake.json")
+        files: dict[str, str | None] = {}
+        for name in names:
+            path = role.workspace / name
+            files[name] = path.read_text(encoding="utf-8") if path.exists() else None
+        return {"role_id": role.config.role_id, "files": files}
+
+    def _commit_workspace_snapshot(self, role: RoleContext) -> dict:
+        """Write immutable bundle, verify checksum, then atomically publish its pointer."""
+        payload = self._snapshot(role)
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        digest = hashlib.sha256(encoded).hexdigest()
+        folder = role.workspace / "snapshots"
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / f"{self._clock().timestamp():.6f}-{uuid.uuid4().hex}.json"
+        self._atomic_write(target, encoded)
+        verified = target.read_bytes()
+        if hashlib.sha256(verified).hexdigest() != digest:
+            raise RoleLoadError("snapshot checksum verification failed")
+        pointer = {"file": target.name, "sha256": digest, "role_id": role.config.role_id}
+        self._atomic_write(folder / "latest.json", json.dumps(pointer, ensure_ascii=False).encode("utf-8"))
+        return payload
+
+    def _restore_workspace_snapshot(self, cfg: RoleConfig) -> None:
+        folder = cfg.workspace / "snapshots"
+        pointer_path = folder / "latest.json"
+        if not pointer_path.exists():
+            return
+        pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+        if pointer.get("role_id") != cfg.role_id:
+            raise RoleLoadError("snapshot role scope mismatch")
+        path = folder / pointer["file"]
+        payload_bytes = path.read_bytes()
+        if hashlib.sha256(payload_bytes).hexdigest() != pointer.get("sha256"):
+            raise RoleLoadError("snapshot checksum mismatch")
+        payload = json.loads(payload_bytes)
+        if payload.get("role_id") != cfg.role_id:
+            raise RoleLoadError("snapshot payload role scope mismatch")
+        for name, contents in payload.get("files", {}).items():
+            if name not in {"state.json", "mind_box.json", "candidates.json", "wake.json"}:
+                raise RoleLoadError(f"unexpected snapshot file: {name}")
+            destination = cfg.workspace / name
+            if contents is None:
+                destination.unlink(missing_ok=True)
+            else:
+                self._atomic_write(destination, contents.encode("utf-8"))
 
     @staticmethod
-    def _wake_for(cfg: RoleConfig) -> WakePayload | None:
-        return WakeState(cfg.workspace).pending(datetime.now(timezone.utc))
+    def _atomic_write(path: Path, data: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp = path.with_suffix(path.suffix + ".tmp")
+        with temp.open("wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp, path)
+
+    def _wake_for(self, cfg: RoleConfig) -> WakePayload | None:
+        return WakeState(cfg.workspace).pending(self._clock())
 
     def mark_first_turn_consumed(self, role_id: str) -> None:
         """Consume wake injection only after the first user message begins."""
@@ -427,6 +520,8 @@ class RoleRegistry:
             )
             self._roles[cfg.role_id] = cfg
         if self._active_id not in self._roles:
+            self._active_id = None
+        elif self._roles[self._active_id].archived:
             self._active_id = None
 
     def _save_registry(self) -> None:

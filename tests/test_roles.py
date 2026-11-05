@@ -107,6 +107,47 @@ class RoleRegistryTests(unittest.TestCase):
         self.registry.delete_archived(self.two.role_id, confirmations=2)
         self.assertFalse(self.two.workspace.exists())
 
+    def test_workspace_snapshot_restores_complete_unit_after_restart(self) -> None:
+        (self.one.workspace / "state.json").write_text('{"dimensions":{"battery":0.4}}', encoding="utf-8")
+        (self.one.workspace / "mind_box.json").write_text('["thought"]', encoding="utf-8")
+        (self.one.workspace / "candidates.json").write_text('[{"draft":"pending"}]', encoding="utf-8")
+        self.registry.switch(self.two.role_id)
+        (self.one.workspace / "state.json").write_text('{"dimensions":{"battery":0.1}}', encoding="utf-8")
+        restarted = RoleRegistry(self.tmp / "registry.json", hooks=Hooks())
+        self.assertEqual(json.loads((self.one.workspace / "state.json").read_text(encoding="utf-8")), {"dimensions": {"battery": 0.4}})
+        self.assertEqual(json.loads((self.one.workspace / "mind_box.json").read_text(encoding="utf-8")), ["thought"])
+        self.assertEqual(json.loads((self.one.workspace / "candidates.json").read_text(encoding="utf-8")), [{"draft": "pending"}])
+        self.assertEqual(restarted.active.config.role_id, self.two.role_id)
+
+    def test_cancel_timeout_rolls_back_without_switching_active_role(self) -> None:
+        callbacks = []
+        self.registry.register_task_canceller(self.one.role_id, lambda: False)
+        result = self.registry.switch(self.two.role_id)
+        self.assertEqual(self.registry.active.config.role_id, self.one.role_id)
+        self.assertIn("timed out", result.error)
+        self.assertIn(f"rollback:{self.one.role_id}", self.hooks.calls)
+
+    def test_workspace_snapshot_checksum_failure_fails_closed(self) -> None:
+        self.registry.switch(self.two.role_id)
+        snap = next((self.one.workspace / "snapshots").glob("*.json"))
+        snap.write_text("corrupt", encoding="utf-8")
+        with self.assertRaisesRegex(Exception, "checksum"):
+            RoleRegistry(self.tmp / "registry.json", hooks=Hooks())
+
+    def test_registered_pipeline_is_cancelled_before_role_release(self) -> None:
+        from cether.runtime_services import RuntimeServices
+        from cether.trigger import TriggerConfig
+
+        services = RuntimeServices(
+            role=self.registry.active, registry=self.registry,
+            trigger_config=TriggerConfig(0.7, 0.7, 3600),
+            perceive=lambda: "event", decision=lambda _request: None,
+            expression=lambda _decision, _request: None,
+        )
+        pipeline = services.build_pipeline()
+        self.registry.switch(self.two.role_id)
+        self.assertTrue(pipeline.stop_requested)
+
     def test_workspace_binding_requires_existing_directory_and_clean_or_role_marker(self) -> None:
         with self.assertRaises(RoleError):
             self.registry.create_role("Missing", self.tmp / "missing", bind_existing=True)

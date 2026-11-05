@@ -138,7 +138,7 @@ class RunnerTests(unittest.TestCase):
             return run
 
         steps = RuntimeSteps(
-            perceive=step("perceive", {"event": "screen"}),
+            perceive=step("perceive", {"event": "screen", "sleep_mode": "deep" if background is not None else "awake", "sleeping": False}),
             append_l0=step("append_l0", "l0-1"),
             should_trigger_l1=step("should_trigger_l1"),
             generate_l1=step("generate_l1", {"narrative": "story"}),
@@ -214,12 +214,50 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "runtime is stopping"):
             pipeline.tick()
 
+    def test_cancel_waits_for_active_tick_and_prevents_late_domain_work(self) -> None:
+        import threading
+        import time
+
+        entered = threading.Event()
+        release = threading.Event()
+        calls = []
+        def perceive():
+            entered.set()
+            release.wait(2)
+            return {"event": "screen"}
+        steps = RuntimeSteps(
+            perceive=perceive,
+            append_l0=lambda _e: calls.append("l0"),
+            should_trigger_l1=lambda *_a: False,
+            generate_l1=lambda *_a: None,
+            update_state=lambda *_a: calls.append("state"),
+            decide=lambda *_a: None,
+            express=lambda *_a: None,
+            feed_result=lambda *_a: None,
+        )
+        pipeline = RuntimePipeline(role_scope="role-a", scope_guard=FakeScopeGuard(), steps=steps)
+        worker = threading.Thread(target=pipeline.tick)
+        worker.start()
+        self.assertTrue(entered.wait(1))
+        result = []
+        canceller = threading.Thread(target=lambda: result.append(pipeline.cancel(timeout=2)))
+        canceller.start()
+        time.sleep(0.02)
+        release.set()
+        worker.join(2)
+        canceller.join(2)
+        self.assertEqual(result, [True])
+        self.assertEqual(calls, ["l0", "state"])
+
     def test_rejects_overlapping_ticks(self) -> None:
         calls = []
         pipeline = self._pipeline(calls)
-        pipeline._stage_active = True
-        with self.assertRaisesRegex(RuntimeError, "concurrent runtime ticks"):
-            pipeline.tick()
+        pipeline._stage_lock.acquire()
+        try:
+            with self.assertRaisesRegex(RuntimeError, "concurrent runtime ticks"):
+                pipeline.tick()
+        finally:
+            pipeline._stage_lock.release()
 
 
 if __name__ == "__main__":
