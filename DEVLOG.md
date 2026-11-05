@@ -117,9 +117,25 @@
 - **通过率**: 100%，`pytest tests -v` 全量回归 215 passed，无回归
 - **新增模块**: `hexbit.py`、`dedup.py`、`idle.py`
 
+### 第四批：空间索引巡游（全部完成）
+
+对齐 TASK.md 39（固定房间、容量限制、满员开新房、桩位只增不回收、固定路线巡游）。
+
+- ✅ 新建 `src/cether/spatial_index.py`：`SpatialIndexConfig`（room_capacity 默认50，统一容量保证巡游顺序可预测）；`Slot`（room/slot_id/memory_id/occupied，frozen）；`SpatialIndex.place` 填满当前房间后自动开新房，`remove` 只把槛位标记 `occupied=False` 而不回收编号（下次 place 永不复用该编号），`patrol_route` 按房间升序→桩位升序返回固定路线（含已清空槛位，供上层按 occupied 过滤）。
+- ✅ 新建 `tests/test_spatial_index.py`（14条用例）：顺序填房、满员开新房、多房连续溢出、移除后编号不复用（验证下一次 place 跳到新房而非回填空槛位）、巡游路线包含已清空槛位且顺序确定可复算、空索引边界。
+
+### 全量算法清单收官
+
+一至五类算法清单（检索融合/记忆生命周期/状态演化/时序调度/感知底层）**全部完成**，无剩余 ⏳ 项。
+
+### 测试覆盖
+
+- **测试数量**: 245 条（新增 14 条：spatial_index）
+- **通过率**: 100%，`pytest tests -v` 全量回归 245 passed，无回归
+
 ### 下一步计划
 
-1. 第四批「空间索引巡游」（低优先级，v2.0可做）
-2. 或转向运行时整体联调、角色卡多角色支持等 TASK.md 其余章节
+1. TASK.md 第九章「角色卡与多角色」（scope 硬绑定、切换回滚、崩溃恢复、角色包导入冲突）与第十章「交互可视化」——当前 `src/cether` 下无对应模块，是前端 Tauri 壳对接前的接口契约缺口
+2. 或推进 `runner.py` 整体运行时主循环串联
 
 然后进入第三批（反刍抑制、Jaccard 合并、随机抖动、六十四卦、玻恩规则）。
