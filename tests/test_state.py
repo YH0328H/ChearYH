@@ -8,7 +8,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from cether.state import (  # noqa: E402
     FourWill,
     SixDrives,
+    TensionStateConfig,
     compute_surprise,
+    detect_tension_state,
     ebbinghaus_decay,
     inertial_filter,
     project_six_drives_to_four_will,
@@ -123,6 +125,130 @@ class DecayTests(unittest.TestCase):
         weight_day1_exp = weibull_decay(1.0, elapsed_seconds=86400, k=1.0)
         # Fast decay should have lower weight after 1 day
         self.assertLess(weight_day1_fast, weight_day1_exp)
+
+
+class TensionStateTests(unittest.TestCase):
+    """张力态自然涌现（TASK.md 60/227）：至少覆盖四种张力态，可观测、可复算。"""
+
+    def setUp(self) -> None:
+        self.cfg = TensionStateConfig()
+
+    def test_close_but_afraid_triggers_on_high_connection_low_security(self) -> None:
+        will = FourWill(social_battery=0.6, connection_desire=0.8, expression_impulse=0.5, security=0.3)
+        hits = detect_tension_state(will, relation_tension=0.5, momentary_valence=0.0, config=self.cfg)
+        names = {h.name for h in hits}
+        self.assertIn("想靠近但不敢", names)
+
+    def test_tired_but_reluctant_triggers_on_low_battery_high_connection(self) -> None:
+        will = FourWill(social_battery=0.2, connection_desire=0.7, expression_impulse=0.5, security=0.6)
+        hits = detect_tension_state(will, relation_tension=0.5, momentary_valence=0.0, config=self.cfg)
+        names = {h.name for h in hits}
+        self.assertIn("累了但舍不得走", names)
+
+    def test_afraid_to_speak_triggers_on_high_impulse_low_security(self) -> None:
+        will = FourWill(social_battery=0.6, connection_desire=0.3, expression_impulse=0.7, security=0.3)
+        hits = detect_tension_state(will, relation_tension=0.5, momentary_valence=0.0, config=self.cfg)
+        names = {h.name for h in hits}
+        self.assertIn("想说话但怕说错", names)
+
+    def test_disappointed_triggers_on_high_impulse_low_valence(self) -> None:
+        will = FourWill(social_battery=0.6, connection_desire=0.3, expression_impulse=0.7, security=0.6)
+        hits = detect_tension_state(will, relation_tension=0.5, momentary_valence=-0.5, config=self.cfg)
+        names = {h.name for h in hits}
+        self.assertIn("期待但失望", names)
+
+    def test_no_hits_when_all_moderate(self) -> None:
+        will = FourWill(social_battery=0.5, connection_desire=0.5, expression_impulse=0.5, security=0.5)
+        hits = detect_tension_state(will, relation_tension=0.5, momentary_valence=0.0, config=self.cfg)
+        self.assertEqual(hits, [])
+
+    def test_evidence_contains_the_triggering_values(self) -> None:
+        will = FourWill(social_battery=0.6, connection_desire=0.8, expression_impulse=0.5, security=0.3)
+        hits = detect_tension_state(will, relation_tension=0.5, momentary_valence=0.0, config=self.cfg)
+        hit = next(h for h in hits if h.name == "想靠近但不敢")
+        self.assertAlmostEqual(hit.evidence["connection_desire"], 0.8)
+        self.assertAlmostEqual(hit.evidence["security"], 0.3)
+        self.assertAlmostEqual(hit.evidence["relation_tension"], 0.5)
+
+    def test_multiple_tension_states_can_coexist(self) -> None:
+        # 连接渴望高+安全感低 同时 社交电量低 → 想靠近但不敢 + 累了但舍不得走 同时触发
+        will = FourWill(social_battery=0.2, connection_desire=0.8, expression_impulse=0.5, security=0.3)
+        hits = detect_tension_state(will, relation_tension=0.5, momentary_valence=0.0, config=self.cfg)
+        names = {h.name for h in hits}
+        self.assertEqual(names, {"想靠近但不敢", "累了但舍不得走"})
+
+    def test_full_derivation_close_but_afraid_from_six_drives(self) -> None:
+        """TASK.md 227：六维驱力初值 → 惯性滤波 → 四意愿终值 → 张力态，全程可复算。
+
+        场景：角色刚经历一次让她有点失望的互动（certainty 走低、seeking 走高），
+        但又很想维系关系（affiliation 高、care 高）。
+        """
+        # 六维驱力初值（上一拍状态）
+        drives_prev = SixDrives(seeking=0.5, affiliation=0.5, competence=0.5, certainty=0.6, care=0.5, play=0.5)
+        # 六维驱力目标值（本拍感知后的瞬时目标）
+        drives_target = SixDrives(seeking=0.7, affiliation=0.9, competence=0.5, certainty=0.2, care=0.8, play=0.3)
+
+        alpha = 0.7
+        drives_filtered = SixDrives(
+            seeking=inertial_filter(drives_prev.seeking, drives_target.seeking, alpha),
+            affiliation=inertial_filter(drives_prev.affiliation, drives_target.affiliation, alpha),
+            competence=inertial_filter(drives_prev.competence, drives_target.competence, alpha),
+            certainty=inertial_filter(drives_prev.certainty, drives_target.certainty, alpha),
+            care=inertial_filter(drives_prev.care, drives_target.care, alpha),
+            play=inertial_filter(drives_prev.play, drives_target.play, alpha),
+        )
+        # 手工复算惯性滤波：v = 0.7*current + 0.3*target
+        self.assertAlmostEqual(drives_filtered.seeking, 0.7 * 0.5 + 0.3 * 0.7, places=6)       # 0.56
+        self.assertAlmostEqual(drives_filtered.affiliation, 0.7 * 0.5 + 0.3 * 0.9, places=6)   # 0.62
+        self.assertAlmostEqual(drives_filtered.certainty, 0.7 * 0.6 + 0.3 * 0.2, places=6)     # 0.48
+        self.assertAlmostEqual(drives_filtered.care, 0.7 * 0.5 + 0.3 * 0.8, places=6)          # 0.59
+
+        will = project_six_drives_to_four_will(drives_filtered, social_battery_current=0.6)
+        # 手工复算四意愿：
+        # connection_desire = affiliation*0.7 + care*0.3 = 0.62*0.7 + 0.59*0.3 = 0.434+0.177=0.611
+        self.assertAlmostEqual(will.connection_desire, 0.62 * 0.7 + 0.59 * 0.3, places=6)
+        # security = certainty*0.8 - seeking*0.2 = 0.48*0.8 - 0.56*0.2 = 0.384-0.112=0.272
+        self.assertAlmostEqual(will.security, 0.48 * 0.8 - 0.56 * 0.2, places=6)
+
+        cfg = TensionStateConfig()
+        hits = detect_tension_state(will, relation_tension=0.6, momentary_valence=-0.1, config=cfg)
+        names = {h.name for h in hits}
+        # connection_desire≈0.611≥0.7? 否，低于默认阈值0.7 —— 用更敏感阈值验证区间判定的连续性
+        self.assertNotIn("想靠近但不敢", names)
+        sensitive_cfg = TensionStateConfig(close_but_afraid_connection_min=0.6, close_but_afraid_security_max=0.3)
+        hits_sensitive = detect_tension_state(will, relation_tension=0.6, momentary_valence=-0.1, config=sensitive_cfg)
+        self.assertIn("想靠近但不敢", {h.name for h in hits_sensitive})
+
+    def test_full_derivation_tired_but_reluctant_from_six_drives(self) -> None:
+        """TASK.md 227：第二个指定张力态"累了但舍不得走"的全程可复算推演。"""
+        drives_prev = SixDrives(seeking=0.5, affiliation=0.5, competence=0.5, certainty=0.5, care=0.5, play=0.5)
+        drives_target = SixDrives(seeking=0.3, affiliation=0.9, competence=0.4, certainty=0.5, care=0.85, play=0.2)
+        alpha = 0.7
+        affiliation_filtered = inertial_filter(drives_prev.affiliation, drives_target.affiliation, alpha)
+        care_filtered = inertial_filter(drives_prev.care, drives_target.care, alpha)
+        self.assertAlmostEqual(affiliation_filtered, 0.7 * 0.5 + 0.3 * 0.9, places=6)  # 0.62
+        self.assertAlmostEqual(care_filtered, 0.7 * 0.5 + 0.3 * 0.85, places=6)         # 0.605
+
+        drives_filtered = SixDrives(
+            seeking=inertial_filter(drives_prev.seeking, drives_target.seeking, alpha),
+            affiliation=affiliation_filtered,
+            competence=inertial_filter(drives_prev.competence, drives_target.competence, alpha),
+            certainty=inertial_filter(drives_prev.certainty, drives_target.certainty, alpha),
+            care=care_filtered,
+            play=inertial_filter(drives_prev.play, drives_target.play, alpha),
+        )
+        # 社交电量独立维护：本拍因长时间陪伴已耗到 0.25（快变层，不经惯性滤波，直接传入）
+        will = project_six_drives_to_four_will(drives_filtered, social_battery_current=0.25)
+        connection_desire_expected = affiliation_filtered * 0.7 + care_filtered * 0.3
+        self.assertAlmostEqual(will.connection_desire, connection_desire_expected, places=6)  # ≈0.615
+
+        cfg = TensionStateConfig()
+        hits = detect_tension_state(will, relation_tension=0.4, momentary_valence=0.1, config=cfg)
+        names = {h.name for h in hits}
+        self.assertIn("累了但舍不得走", names)
+        hit = next(h for h in hits if h.name == "累了但舍不得走")
+        self.assertAlmostEqual(hit.evidence["social_battery"], 0.25)
+        self.assertAlmostEqual(hit.evidence["connection_desire"], connection_desire_expected, places=6)
 
 
 if __name__ == "__main__":

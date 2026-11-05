@@ -36,8 +36,6 @@
 
 ### 未完成任务（第二批剩余）
 
-- ⏳ 张力态涌现（多维区间判定，如：连接渴望>0.7且安全感<0.4="想靠近但不敢"）
-
 ## 2026-11-04 (周三)
 
 ### 任务1完成：挫败冷却 + 随机抖动（测试补齐）
@@ -57,6 +55,24 @@
 - ✅ `tests/test_context_budget.py`（13条用例）：TOML加载、未知category报错、核心验收场景（高低优先级同时超预算→低优先级被裁高优先级完整保留）、预算不互相借用、同级时间近者优先、整段裁剪不做半句截断、裁决可观测、输出按优先级排序、渲染拼接顺序。
 - ✅ ALGORITHMS.md 上下文预算裁切状态 ⏳→✅。
 - ✅ 全量回归：`pytest tests -v` **161 passed**，无回归。
+
+### 任务3完成：张力态涌现（第二批收官）
+
+对齐 TASK.md 60（至少覆盖4种张力态）、279（由此刻情绪+关系张力投影得出，不新增状态变量）、227（替换条款：提交两个指定张力态的全程可复算数值推演）。
+
+- ✅ `src/cether/state.py` 新增：`TensionStateConfig`（8个可配置区间阈值，frozen dataclass）、`TensionStateHit`（命中记录，含name/description/evidence可观测字段）、`detect_tension_state(will, relation_tension, momentary_valence, config)` 判定四种张力态：
+  - 想靠近但不敢：connection_desire≥0.7 且 security≤0.4
+  - 累了但舍不得走：social_battery≤0.3 且 connection_desire≥0.6
+  - 想说话但怕说错：expression_impulse≥0.6 且 security≤0.4
+  - 期待但失望：expression_impulse≥0.6 且 momentary_valence≤-0.2
+  - `relation_tension` 当前仅记入 evidence 供可观测性与未来检索偏置使用，不参与阈值判定（避免在真实关系张力分布未知前编造不可验证的额外阈值）。
+- ✅ `tests/test_state.py` 新增 `TensionStateTests`（9条用例），其中两条是 TASK.md 227 要求的全程可复算推演：`test_full_derivation_close_but_afraid_from_six_drives` 与 `test_full_derivation_tired_but_reluctant_from_six_drives`，从六维驱力初值+目标值经惯性滤波（α=0.7）手工复算到四意愿终值，再喂入 `detect_tension_state` 验证区间判定命中，每一步都有显式算式注释可人工复核。
+- ✅ ALGORITHMS.md 张力态涌现状态 ⏳→✅。
+- ✅ 全量回归：`pytest tests -v` **170 passed**，无回归。
+
+### 第二批收官
+
+挫败冷却、随机抖动、上下文预算裁切、张力态涌现四项全部完成，第二批任务结束。下一步进入第三批：反刍抑制、Jaccard相似度合并、六十四卦编码、玻恩规则抽样。
 
 ### 测试覆盖
 

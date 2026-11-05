@@ -153,6 +153,134 @@ def translate_to_texture(dimension: str, value: float) -> str:
         return f"{dimension}={value:.2f}"
 
 
+@dataclass(frozen=True)
+class TensionStateConfig:
+    """张力态区间判定阈值（TASK.md 60/227：张力态自然涌现）。
+
+    张力态不是新增状态变量，而是四意愿（FourWill）与关系张力、此刻情绪
+    （valence）在数值区间上的组合判定（对齐 TASK.md 279）。每个阈值可
+    独立配置，便于不同角色卡调出不同的"敏感度"。
+    """
+
+    close_but_afraid_connection_min: float = 0.7  # 想靠近但不敢：连接渴望下限
+    close_but_afraid_security_max: float = 0.4    # 想靠近但不敢：安全感上限
+    tired_but_reluctant_battery_max: float = 0.3  # 累了但舍不得走：社交电量上限
+    tired_but_reluctant_connection_min: float = 0.6  # 累了但舍不得走：连接渴望下限
+    afraid_to_speak_impulse_min: float = 0.6      # 想说话但怕说错：表达冲动下限
+    afraid_to_speak_security_max: float = 0.4     # 想说话但怕说错：安全感上限
+    disappointed_impulse_min: float = 0.6         # 期待但失望：表达冲动（代理期待）下限
+    disappointed_valence_max: float = -0.2        # 期待但失望：此刻情绪效价上限
+
+
+@dataclass(frozen=True)
+class TensionStateHit:
+    """单个张力态命中记录，含触发它的具体数值（可观测、可复算）。"""
+
+    name: str
+    description: str
+    evidence: dict[str, float]
+
+
+def detect_tension_state(
+    will: FourWill,
+    relation_tension: float,
+    momentary_valence: float,
+    config: TensionStateConfig | None = None,
+) -> list[TensionStateHit]:
+    """张力态自然涌现：由四意愿 + 关系张力 + 此刻情绪投影得出，不新增状态变量。
+
+    覆盖 TASK.md 60 要求的至少四种张力态：
+    - 想靠近但不敢：connection_desire 高 且 security 低
+    - 累了但舍不得走：social_battery 低 且 connection_desire 高
+    - 想说话但怕说错：expression_impulse 高 且 security 低
+    - 期待但失望：expression_impulse 高（代理"期待"）且 此刻情绪效价低（失望）
+
+    `relation_tension`（0.0-1.0，关系张力，中变层）目前作为所有判定的
+    共同抑制性前提：关系张力过低时（双方关系松弛），矛盾态不易涌现；
+    该参数预留给未来按张力强度调节触发概率/强度，当前版本仅记录在
+    evidence 中供检索偏置与可观测性使用，不参与阈值判定本身，避免在
+    未取得真实关系张力分布前引入不可验证的新阈值（遵循 ARCHITECTURE.md
+    “参数预设化不因调参停滞进度”，暂缺的交互假设留空而非编造）。
+
+    Args:
+        will: 当前四意愿投影结果
+        relation_tension: 关系张力（中变层，0.0-1.0）
+        momentary_valence: 此刻情绪效价（快变层，-1.0 到 1.0）
+        config: 区间阈值配置，缺省使用预设值
+
+    Returns:
+        命中的张力态列表，每项含触发证据（用于验收 TASK.md 227 的数值推演记录）
+    """
+    cfg = config or TensionStateConfig()
+    hits: list[TensionStateHit] = []
+
+    if (
+        will.connection_desire >= cfg.close_but_afraid_connection_min
+        and will.security <= cfg.close_but_afraid_security_max
+    ):
+        hits.append(
+            TensionStateHit(
+                name="想靠近但不敢",
+                description="连接渴望高但安全感低：想靠近又怕受伤",
+                evidence={
+                    "connection_desire": will.connection_desire,
+                    "security": will.security,
+                    "relation_tension": relation_tension,
+                },
+            )
+        )
+
+    if (
+        will.social_battery <= cfg.tired_but_reluctant_battery_max
+        and will.connection_desire >= cfg.tired_but_reluctant_connection_min
+    ):
+        hits.append(
+            TensionStateHit(
+                name="累了但舍不得走",
+                description="社交电量低但连接渴望高：累却不想结束这段陪伴",
+                evidence={
+                    "social_battery": will.social_battery,
+                    "connection_desire": will.connection_desire,
+                    "relation_tension": relation_tension,
+                },
+            )
+        )
+
+    if (
+        will.expression_impulse >= cfg.afraid_to_speak_impulse_min
+        and will.security <= cfg.afraid_to_speak_security_max
+    ):
+        hits.append(
+            TensionStateHit(
+                name="想说话但怕说错",
+                description="表达冲动高但安全感低：有话想说又怕说错惹麻烦",
+                evidence={
+                    "expression_impulse": will.expression_impulse,
+                    "security": will.security,
+                    "relation_tension": relation_tension,
+                },
+            )
+        )
+
+    if (
+        will.expression_impulse >= cfg.disappointed_impulse_min
+        and momentary_valence <= cfg.disappointed_valence_max
+    ):
+        hits.append(
+            TensionStateHit(
+                name="期待但失望",
+                description="表达冲动高（曾有期待）但此刻情绪效价低：期待落空后的失落",
+                evidence={
+                    "expression_impulse": will.expression_impulse,
+                    "momentary_valence": momentary_valence,
+                    "relation_tension": relation_tension,
+                },
+            )
+        )
+
+    return hits
+
+
 def ebbinghaus_decay(initial_weight: float, elapsed_seconds: float, tau: float = 86400 * 7) -> float:
     """Ebbinghaus forgetting curve: exponential decay over time.
 
