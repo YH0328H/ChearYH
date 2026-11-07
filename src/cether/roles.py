@@ -342,24 +342,31 @@ class RoleRegistry:
         self._save_registry()
 
     def export_package(self, role_id: str, destination: Path) -> Path:
-        """Export persona/config files only; memory, state and global channel configs are excluded."""
+        """Export role-owned memory/persona/state while excluding global channels."""
         cfg = self._roles.get(role_id)
         if cfg is None:
             raise RoleError("unknown role")
         destination.parent.mkdir(parents=True, exist_ok=True)
+        included = list(ROLE_CARD_FILES) + ["state.json", "mind_box.json"]
         payload = {
             "format": "cetheryh-role-package",
-            "version": 1,
+            "version": 2,
             "role": {"name": cfg.name, "self_awareness": cfg.self_awareness, "metadata": cfg.metadata},
-            "included": list(ROLE_CARD_FILES),
-            "excluded": ["memory", "state", "mind_box", "global_channels", "skills"],
+            "included": included + ["memory/"],
+            "excluded": ["global_channels", "skills", "chat.toml", "embedding.toml"],
+            "wake_on_import": True,
         }
         with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("package.json", json.dumps(payload, ensure_ascii=False, indent=2))
-            for rel in ROLE_CARD_FILES:
+            for rel in included:
                 path = cfg.workspace / rel
                 if path.is_file():
                     archive.write(path, rel)
+            memory = cfg.workspace / "memory"
+            if memory.is_dir():
+                for path in sorted(memory.rglob("*")):
+                    if path.is_file():
+                        archive.write(path, path.relative_to(cfg.workspace).as_posix())
         return destination
 
     def import_package(
@@ -376,7 +383,7 @@ class RoleRegistry:
             if any(Path(n).is_absolute() or ".." in Path(n).parts for n in names):
                 raise RoleError("package contains unsafe paths")
             manifest = json.loads(archive.read("package.json"))
-            if manifest.get("format") != "cetheryh-role-package" or manifest.get("version") != 1:
+            if manifest.get("format") != "cetheryh-role-package" or manifest.get("version") not in {1, 2}:
                 raise RoleError("unsupported role package")
             original_name = manifest["role"]["name"]
             name_exists = any(r.name.casefold() == original_name.casefold() and not r.archived for r in self._roles.values())
@@ -396,12 +403,14 @@ class RoleRegistry:
             else:
                 name = original_name
             cfg = self.create_role(name, workspace, self_awareness=manifest["role"].get("self_awareness", "resident"), metadata=manifest["role"].get("metadata", {}))
-            allowed = set(ROLE_CARD_FILES)
+            allowed = set(ROLE_CARD_FILES) | {"state.json", "mind_box.json"}
             for info in archive.infolist():
-                if info.filename in allowed:
-                    target = cfg.workspace / info.filename
+                rel = Path(info.filename)
+                if info.filename in allowed or (rel.parts and rel.parts[0] == "memory"):
+                    target = cfg.workspace / rel
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(archive.read(info))
+            WakeState(cfg.workspace).save_snapshot({"imported_from": str(package), "role_name": name}, self._clock())
             self._save_registry()
             return cfg
 

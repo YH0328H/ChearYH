@@ -101,6 +101,11 @@ fn memory_timeline(cursor: Option<String>, limit: Option<u32>, state: State<'_, 
     state.0.lock().map_err(|e| e.to_string())?.request("memory_timeline", serde_json::json!({"cursor": cursor, "limit": limit.unwrap_or(100)}))
 }
 
+#[tauri::command]
+fn runtime_action(action: String, payload: Option<serde_json::Value>, state: State<'_, BridgeState>) -> Result<serde_json::Value, String> {
+    state.0.lock().map_err(|e| e.to_string())?.request(action.as_str(), payload.unwrap_or_else(|| serde_json::json!({})))
+}
+
 fn python_path() -> String {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().join("src");
     if let Some(existing) = std::env::var_os("PYTHONPATH") {
@@ -124,7 +129,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![app_bootstrap, send_message, create_role, switch_role, ui_action, memory_timeline])
+        .invoke_handler(tauri::generate_handler![app_bootstrap, send_message, create_role, switch_role, ui_action, memory_timeline, runtime_action])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
 }

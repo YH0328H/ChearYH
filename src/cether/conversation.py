@@ -39,6 +39,8 @@ class ConversationService:
         provider: ConversationProvider | None = None,
         retrieval: L0RetrievalService | None = None,
         retrieval_config: RetrievalConfigWatcher | None = None,
+        injected_memories: Callable[[], tuple[dict, ...]] | None = None,
+        excluded_ids: Callable[[], frozenset[str]] | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self.role = role
@@ -46,6 +48,8 @@ class ConversationService:
         self.runtime = runtime
         self.provider = provider or LocalRuleProvider()
         self.clock = clock
+        self.injected_memories = injected_memories
+        self.excluded_ids = excluded_ids
         self._lock = threading.Lock()
         self._history_path = role.workspace / "conversation.jsonl"
         self._l0 = L0Archive(role.workspace / "memory" / "l0.jsonl")
@@ -55,6 +59,7 @@ class ConversationService:
             spatial_provider=getattr(runtime, "spatial_provider", None),
             embedding_provider=getattr(runtime, "embedding_provider", None),
             graph_provider=getattr(runtime, "graph_provider", None),
+            excluded_ids=excluded_ids,
         )
 
     def send(self, text: str) -> ConversationTurn:
@@ -69,6 +74,9 @@ class ConversationService:
             state = self.runtime._read_state()
             wake = self.runtime.pending_wake_context()
             memories = self.retrieval.search(user_text)
+            if self.injected_memories is not None:
+                injected = self.injected_memories()
+                memories = tuple([str(item.get("text", "")) for item in injected if item.get("text")] + list(memories))
             request = TurnRequest(
                 role_name=self.role.config.name,
                 persona=self._persona(),

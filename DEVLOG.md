@@ -224,3 +224,12 @@
 - ✅ 手动记忆沿用 L0 append-only 约束，并写入可追溯的 `memory_tier=high` 元数据；角色切换继续由 `RoleRegistry` 的单活事务和 wake injection 管理。
 - ✅ 新增 `tests/test_desktop_ui.py` 覆盖 bootstrap 状态、动作反馈、角色本地时间轴和切换进度；桌面桥接专项与全量回归均通过。
 - ⚠️ 当前阶段交付的是可运行桌面整合壳；星图渲染、冷库完整交互、后台事件流和配置写入面板仍需后续迭代。
+
+### 阶段 3：感知、记忆生命周期与角色管理（2026-11-07）
+
+- ✅ Desktop 默认接入 `Perceiver`：首次感知说明与确认、角色级 allow/deny 应用过滤、画面变化/已见记录、截屏感知与运行事件两套独立暂停；截屏或视觉依赖故障降级为可观测事件，不阻断运行时。
+- ✅ 新增 `memory_lifecycle.py` 与 `diary.py`：删除/降权/移入冷库/boost/移热/一次性注入均通过角色私有 sidecar 实现，保持 `memory/l0.jsonl` append-only；L1 日记删除只隐藏视图，原始日记不可变。
+- ✅ 角色包升级为 version 2，包含角色私有 memory/persona/state 与导入唤醒快照，排除 global channels；Desktop 暴露角色封存、恢复、双确认删除、导入导出、陪伴/工作模式、工具事件提示和 onboarding 完成入口。
+- ✅ Tauri 增加通用 `runtime_action` command，前端增加首次感知确认、已见记录、日记、模式切换和角色管理入口；新增 `tests/test_stage3_integration.py` 覆盖感知确认/双暂停、生命周期 append-only/一次性注入、角色包 memory 与 wake。
+- ✅ 验证：全量 `pytest tests benchmarks/test_retrieval_baseline.py -q --tb=short -x`：**352 passed**；`compileall`、`cargo check --manifest-path src-tauri\\Cargo.toml`、嵌入式 JavaScript `node --check`、`git diff --check` 均通过。
+- ⚠️ 正式验收 corpus、星图真实渲染、后台事件持续订阅、配置写入面板、preset 升级保护及 TASK.md 全量端到端映射仍需后续验收；本阶段提交的是已验证的运行时/桥接接线，不将接口接通等同于完整产品验收。

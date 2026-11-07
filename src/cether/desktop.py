@@ -16,7 +16,14 @@ from .conversation import ConversationService
 from .cognition import LocalDecisionProvider, LocalExpressionProvider, load_cognition_config
 from .graph_retrieval import LocalCooccurrenceGraphProvider
 from .l0 import L0Archive
+from .diary import DiaryService
+from .events import RuntimeEvents
+from .memory_lifecycle import MemoryLifecycleService
+from .mode import ModeController
+from .perception import Perceiver
+from .perception_config import load_perception_config
 from .providers import LocalRuleProvider, OpenAICompatibleProvider, load_provider_config
+from .sensing import FirstRunNotice, list_seen
 from .retrieval import embed_texts, load_embedding_config
 from .roles import RoleContext, RoleRegistry
 from .runtime_services import RuntimeServices
@@ -45,6 +52,15 @@ class DesktopRuntime:
         self._capture_paused = False
         self._events_paused = False
         self._ui_notices: list[str] = []
+        self._capture_paused = False
+        self._events_paused = False
+        self._perceiver: Perceiver | None = None
+        self._events: RuntimeEvents | None = None
+        self._first_run_notice: FirstRunNotice | None = None
+        self._lifecycle: MemoryLifecycleService | None = None
+        self._diary: DiaryService | None = None
+        self._seen_path: Path | None = None
+        self._mode = ModeController()
         self.ui: UiContract | None = None
         self._bind_active()
 
@@ -63,6 +79,38 @@ class DesktopRuntime:
             return self._bootstrap()
         if action == "switch_role":
             return self._switch_role(str(request["role_id"]))
+        if action == "role_archive":
+            role_id = str(request["role_id"])
+            archived = self.registry.archive(role_id)
+            return {"role_id": archived.role_id, "archived": archived.archived}
+        if action == "role_restore":
+            restored = self.registry.restore(str(request["role_id"]))
+            return {"role_id": restored.role_id, "archived": restored.archived}
+        if action == "role_delete":
+            self.registry.delete_archived(str(request["role_id"]), confirmations=int(request.get("confirmations", 0)))
+            return {"deleted": True, "role_id": str(request["role_id"])}
+        if action == "role_export":
+            destination = Path(str(request["destination"])).expanduser().resolve()
+            result = self.registry.export_package(str(request["role_id"]), destination)
+            return {"package": str(result)}
+        if action == "role_import":
+            package = Path(str(request["package"])).expanduser().resolve()
+            workspace = Path(str(request["workspace"])).expanduser().resolve()
+            cfg = self.registry.import_package(package, workspace, conflict=str(request.get("conflict", "rename")),
+                                               renamed_to=request.get("renamed_to"))
+            return {"role_id": cfg.role_id, "name": cfg.name, "wake_pending": bool(self.registry.pending_wake(cfg.role_id))}
+        if action == "set_mode":
+            state = self._mode.set_override(request.get("mode"))
+            return {"mode": state.mode, "source": state.source, "override": state.override}
+        if action == "complete_onboarding":
+            if self.registry.active:
+                path = self.registry.active.workspace / "onboarding.json"
+                path.write_text(json.dumps({"completed": True}, ensure_ascii=False), encoding="utf-8")
+            return self._bootstrap()
+        if action == "tool_notice":
+            if self._events:
+                self._events.record(str(request.get("kind", "tool")), str(request.get("description", "")))
+            return {"visible": True, "status": "recorded"}
         if action == "send_message":
             if self.conversation is None:
                 raise RuntimeError("no active conversation")
@@ -112,9 +160,20 @@ class DesktopRuntime:
             self.runtime = None
             self.conversation = None
             self.ui = None
+            self._perceiver = None
+            self._events = None
+            self._lifecycle = None
+            self._diary = None
             return
         if self.runtime:
             self.runtime.close()
+        self._lifecycle = MemoryLifecycleService(role, self.registry)
+        self._diary = DiaryService(role, self.registry)
+        self._seen_path = role.workspace / "world.jsonl"
+        self._first_run_notice = FirstRunNotice(role.workspace / "sensing-consent.json")
+        self._perception_config = load_perception_config(Path(__file__).resolve().parents[2] / "config" / "perception.toml")
+        self._perceiver = self._build_perceiver(role)
+        self._events = RuntimeEvents(role.workspace / "runtime-events.jsonl")
         cognition_path = Path(__file__).resolve().parents[2] / "config" / "cognition.toml"
         decision_config, expression_config = load_cognition_config(cognition_path)
         decision_provider = LocalDecisionProvider(decision_config)
@@ -134,7 +193,7 @@ class DesktopRuntime:
 
         self.runtime = RuntimeServices(
             role=role, registry=self.registry, trigger_config=TriggerConfig(0.7, 0.7, 3600),
-            perceive=lambda: None, decision=decision_provider.decide,
+            perceive=self._perceive, decision=decision_provider.decide,
             expression=lambda decision, request: expression_provider.express(decision, request),
             sleep_consolidation=sleep_service.consolidate,
             reflection=lambda active_role, state: {
@@ -154,7 +213,11 @@ class DesktopRuntime:
             config = load_provider_config(config_path)
             if config.api_key():
                 provider = OpenAICompatibleProvider(config)
-        self.conversation = ConversationService(role=role, registry=self.registry, runtime=self.runtime, provider=provider)
+        self.conversation = ConversationService(
+            role=role, registry=self.registry, runtime=self.runtime, provider=provider,
+            injected_memories=self._consume_injections,
+            excluded_ids=lambda: self._lifecycle.excluded_ids() if self._lifecycle else frozenset(),
+        )
         self.ui = self._build_ui_contract(role)
 
     def _build_ui_contract(self, role: RoleContext) -> UiContract:
@@ -166,10 +229,98 @@ class DesktopRuntime:
             set_events_paused=self._set_events_paused,
             remember_this=self._remember_this,
             memory_page=self._memory_page,
+            forget_memory=self._forget_memory,
+            restore_memory=self._restore_memory,
+            seen_records=self._seen_records,
+            diary_page=self._diary_page,
+            delete_diary=self._delete_diary,
+            acknowledge_perception=self._acknowledge_perception,
             perception_paused=lambda: self._capture_paused,
             events_paused=lambda: self._events_paused,
+            first_run_notice_due=self._first_run_notice_due,
             memory_available=lambda: True,
         )
+
+    def _build_perceiver(self, role: RoleContext) -> Perceiver:
+        """Build default-on screen perception; unavailable Windows capture degrades to a stable tick."""
+        try:
+            from .capture import foreground_app, grab_primary_monitor
+            from .vision import describe, load_vision_config
+            vision_path = Path(__file__).resolve().parents[2] / "config" / "vision.toml"
+            cfg = load_vision_config(vision_path, os.environ) if vision_path.is_file() else None
+            describer = (lambda: describe(cfg, self._last_png, _post_json)) if cfg and cfg.api_key else None
+            self._last_png = b""
+            def capture():
+                thumb, png = grab_primary_monitor()
+                self._last_png = png
+                return thumb
+            return Perceiver(capture, describer, role.workspace / "world.jsonl", foreground_app,
+                              allow_apps=self._perception_config.allow_apps,
+                              deny_apps=self._perception_config.deny_apps,
+                              hamming_threshold=self._perception_config.hamming_threshold)
+        except Exception:
+            return Perceiver(lambda: [0] * 64, None, role.workspace / "world.jsonl", lambda: "",
+                              allow_apps=self._perception_config.allow_apps,
+                              deny_apps=self._perception_config.deny_apps,
+                              hamming_threshold=self._perception_config.hamming_threshold)
+
+    def _perceive(self) -> Any:
+        if self._first_run_notice_due():
+            return {"changed": False, "description": "首次感知说明待确认", "perception_consent_required": True}
+        if self._perceiver is None:
+            return {"changed": False, "description": "感知通道未配置"}
+        try:
+            tick = self._perceiver.tick()
+        except Exception as exc:
+            if self._events:
+                self._events.record("perception_error", str(exc))
+            return {"changed": False, "description": "感知暂不可用", "error": str(exc)}
+        if not tick.changed:
+            return {"changed": False, "description": None, "distance": tick.distance}
+        return {"changed": True, "description": tick.description or "屏幕发生变化（尚未配置视觉描述）", "distance": tick.distance,
+                "source": "perception", "foreground_app": self._foreground_app()}
+
+    def _foreground_app(self) -> str:
+        try:
+            from .capture import foreground_app
+            return foreground_app()
+        except (ImportError, OSError, AttributeError):
+            return ""
+
+    def _first_run_notice_due(self) -> bool:
+        return bool(self._first_run_notice and self._first_run_notice.due())
+
+    def _acknowledge_perception(self) -> bool:
+        if not self._first_run_notice:
+            raise RuntimeError("perception consent unavailable")
+        self._first_run_notice.mark_shown()
+        return True
+
+    def _seen_records(self) -> list[dict[str, Any]]:
+        if not self._seen_path or not self._seen_path.exists():
+            return []
+        return [json.loads(line) for line in self._seen_path.read_text(encoding="utf-8").splitlines() if line.strip()][-50:]
+
+    def _forget_memory(self, memory_id: str, choice: str) -> dict[str, Any]:
+        if not self._lifecycle:
+            raise RuntimeError("memory lifecycle unavailable")
+        return asdict(self._lifecycle.forget(memory_id, choice))
+
+    def _restore_memory(self, memory_id: str, choice: str) -> dict[str, Any]:
+        if not self._lifecycle:
+            raise RuntimeError("memory lifecycle unavailable")
+        return asdict(self._lifecycle.restore(memory_id, choice))
+
+    def _consume_injections(self) -> tuple[dict, ...]:
+        return self._lifecycle.consume_injections() if self._lifecycle else ()
+
+    def _diary_page(self) -> list[dict[str, Any]]:
+        return self._diary.list_entries() if self._diary else []
+
+    def _delete_diary(self, diary_id: str) -> bool:
+        if not self._diary:
+            raise RuntimeError("diary unavailable")
+        return self._diary.delete(diary_id)
 
     def _role_cards(self) -> tuple[RoleCardView | None, list[RoleCardView]]:
         active_id = self.registry.active.config.role_id if self.registry.active else None
@@ -197,8 +348,9 @@ class DesktopRuntime:
         else:
             sleep_status = "清醒"
         reason = self.runtime._last_gate_reason if self.runtime else None
+        mode = self._mode.state(self._foreground_app())
         return StatusView(translate_to_texture("social_battery", battery), reason, tuple(self._read_mind_box()),
-                          "未配置主动窗口", sleep_status, "companion", "runtime")
+                          "未配置主动窗口", sleep_status, mode.mode, mode.source)
 
     def _read_mind_box(self) -> list[str]:
         path = self.registry.active.workspace / "mind_box.json" if self.registry.active else None
@@ -215,6 +367,8 @@ class DesktopRuntime:
         if not self.registry.active:
             return [], None, 0
         records = list(L0Archive(self.registry.active.workspace / "memory" / "l0.jsonl"))
+        if self._lifecycle:
+            records = [self._lifecycle.annotate(record) for record in records]
         records.reverse()
         page = records[:limit]
         return page, None, len(records)
@@ -234,9 +388,13 @@ class DesktopRuntime:
 
     def _set_capture_paused(self, value: bool) -> None:
         self._capture_paused = value
+        if self._perceiver:
+            self._perceiver.pause_capture() if value else self._perceiver.resume_capture()
 
     def _set_events_paused(self, value: bool) -> None:
         self._events_paused = value
+        if self._events:
+            self._events.pause() if value else self._events.resume()
 
     def _view_payload(self) -> dict[str, Any]:
         if self.ui is None:

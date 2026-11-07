@@ -27,6 +27,10 @@ class UiAction(str, Enum):
     ARCHIVE_MEMORY = "archive_memory"
     RESTORE_MEMORY = "restore_memory"
     INJECT_ONCE = "inject_once"
+    OPEN_SEEN = "open_seen"
+    OPEN_DIARY = "open_diary"
+    DELETE_DIARY = "delete_diary"
+    ACKNOWLEDGE_PERCEPTION = "acknowledge_perception"
 
 
 @dataclass(frozen=True)
@@ -149,6 +153,12 @@ class UiContract:
         deepen: Callable[[str], float] | None = None,
         switch_role: Callable[[str], Any] | None = None,
         memory_page: Callable[[str | None, int], tuple[list[dict[str, Any]], str | None, int]] | None = None,
+        forget_memory: Callable[[str, str], Any] | None = None,
+        restore_memory: Callable[[str, str], Any] | None = None,
+        seen_records: Callable[[], list[dict[str, Any]]] | None = None,
+        diary_page: Callable[[], list[dict[str, Any]]] | None = None,
+        delete_diary: Callable[[str], Any] | None = None,
+        acknowledge_perception: Callable[[], Any] | None = None,
         perception_paused: Callable[[], bool] = lambda: False,
         events_paused: Callable[[], bool] = lambda: False,
         first_run_notice_due: Callable[[], bool] = lambda: False,
@@ -163,6 +173,12 @@ class UiContract:
             UiAction.THINK_AGAIN: think_again,
             UiAction.DEEPEN: deepen,
             UiAction.SWITCH_ROLE: switch_role,
+            UiAction.ARCHIVE_MEMORY: forget_memory,
+            UiAction.RESTORE_MEMORY: restore_memory,
+            UiAction.OPEN_SEEN: seen_records,
+            UiAction.OPEN_DIARY: diary_page,
+            UiAction.DELETE_DIARY: delete_diary,
+            UiAction.ACKNOWLEDGE_PERCEPTION: acknowledge_perception,
         }
         self._set_capture_paused = set_capture_paused or (lambda _value: None)
         self._set_events_paused = set_events_paused or (lambda _value: None)
@@ -217,14 +233,40 @@ class UiContract:
                 return self._result(action, "opened", "请选择遗忘方式", {"memory_id": data["memory_id"], "choices": ["delete", "decrease_weight", "move_to_cold"], "delete_warning": "不推荐，会造成记忆断层"})
             if choice not in {"delete", "decrease_weight", "move_to_cold"}:
                 raise ValueError("unknown forget choice")
-            return self._result(action, "accepted", "已记录记忆处理请求", {"memory_id": data["memory_id"], "choice": choice, "l0_immutable": True})
+            callback = self._actions[action]
+            if callback is None:
+                return self._result(action, "accepted", "已记录记忆处理请求", {"memory_id": data["memory_id"], "choice": choice, "l0_immutable": True})
+            result = callback(data["memory_id"], choice)
+            payload = {"memory_id": data["memory_id"], "choice": choice, "l0_immutable": True, "result": result}
+            return self._result(action, "completed", "记忆已进入处理流程", payload)
         if action == UiAction.RESTORE_MEMORY:
             choice = data.get("choice")
             if choice is None:
                 return self._result(action, "opened", "请选择捞回方式", {"memory_id": data["memory_id"], "choices": ["boost", "move_to_hot", "inject_once"]})
             if choice not in {"boost", "move_to_hot", "inject_once"}:
                 raise ValueError("unknown restore choice")
-            return self._result(action, "accepted", "已记录冷库捞回请求", {"memory_id": data["memory_id"], "choice": choice, "storage_unchanged": choice == "inject_once"})
+            callback = self._actions[action]
+            if callback is None:
+                return self._result(action, "accepted", "已记录冷库捞回请求", {"memory_id": data["memory_id"], "choice": choice, "storage_unchanged": choice == "inject_once"})
+            result = callback(data["memory_id"], choice)
+            payload = {"memory_id": data["memory_id"], "choice": choice, "storage_unchanged": choice == "inject_once", "result": result}
+            return self._result(action, "completed", "冷库记忆已处理", payload)
+        if action == UiAction.ACKNOWLEDGE_PERCEPTION:
+            callback = self._actions[action]
+            if callback is None:
+                return self._result(action, "unavailable", "感知许可服务暂不可用", accepted=False)
+            return self._result(action, "completed", "已确认感知说明", {"result": callback()})
+        if action in {UiAction.OPEN_SEEN, UiAction.OPEN_DIARY}:
+            callback = self._actions[action]
+            if callback is None:
+                return self._result(action, "unavailable", "当前记录服务暂不可用", accepted=False)
+            return self._result(action, "opened", "已打开记录", {"records": callback()})
+        if action == UiAction.DELETE_DIARY:
+            callback = self._actions[action]
+            if callback is None:
+                return self._result(action, "unavailable", "日记服务暂不可用", accepted=False)
+            result = callback(str(data["diary_id"]))
+            return self._result(action, "completed", "日记已从视图隐藏", {"result": result, "immutable": True})
         if action == UiAction.LOOK_NOW and self._capture_paused:
             return self._result(action, "blocked", "截屏感知已暂停", accepted=False)
         callback = self._actions[action]

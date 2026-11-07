@@ -1,0 +1,5 @@
+# Default-on screen perception filters. Empty allow/deny lists observe all apps.
+[perception]
+allow_apps = []
+deny_apps = []
+hamming_threshold = 5

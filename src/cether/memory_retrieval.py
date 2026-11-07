@@ -183,6 +183,7 @@ class L0RetrievalService:
         spatial_provider: Callable[[str, list[dict]], list[RetrievalResult]] | None = None,
         current_state: Callable[[], dict[str, float]] | None = None,
         current_context: Callable[[], dict[str, str | None]] | None = None,
+        excluded_ids: Callable[[], frozenset[str]] | None = None,
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.role = role
@@ -193,6 +194,7 @@ class L0RetrievalService:
         self.spatial_provider = spatial_provider
         self.current_state = current_state or (lambda: {})
         self.current_context = current_context or (lambda: {})
+        self.excluded_ids = excluded_ids or (lambda: frozenset())
         self._recall_counts: dict[str, int] = {}
         self._embedding_cache: dict[str, tuple[str, list[float]]] = {}
         self._embedding_archive_signature: tuple[int, int] | None = None
@@ -251,7 +253,9 @@ class L0RetrievalService:
                     }
                     self._embedding_archive_signature = signature
             records = self._records_cache
-            by_id = {str(record["id"]): record for record in records}
+            excluded = self.excluded_ids()
+            by_id = {str(record["id"]): record for record in records if str(record.get("id")) not in excluded}
+            records = tuple(record for record in records if str(record.get("id")) not in excluded)
             low = [record for record in records if record.get("weight", "normal") == "low"]
             normal = [record for record in records if record.get("weight", "normal") != "low" and not self._is_high_record(record, cfg)]
             high = [record for record in records if self._is_high_record(record, cfg)]
@@ -259,7 +263,7 @@ class L0RetrievalService:
             query_state = self.current_state()
             query_context = self.current_context()
 
-            normal_docs = list(self._normal_docs_cache)
+            normal_docs = [doc for doc in self._normal_docs_cache if doc.id in by_id]
             channel_lists: list[list[RetrievalResult]] = []
             channel_weights: list[float] = []
             lexical = []

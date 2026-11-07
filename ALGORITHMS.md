@@ -153,4 +153,6 @@
 
 **阶段 2桌面整合状态（2026-11-07）**：Python desktop bridge 已暴露状态快照、记忆时间轴、上下文动作、角色切换进度与 wake injection；Tauri 已转发 `ui_action`/`memory_timeline`，透明陪伴壳已接入聊天、角色管理、状态和记忆面板。`tests/test_desktop_ui.py` 覆盖核心动作反馈与角色本地数据边界。
 
-**未完成**：正式项目验收 corpus 的规模化性能测量，以及 TASK.md 全量端到端验收；星图可视化、冷库完整交互、后台事件流和配置写入面板仍是桌面后续迭代项。阶段1关键运行时闭环（检索融合、决策表达、睡眠调度/打断、巩固反思）已接通并通过回归。
+**阶段 3运行时与生命周期接线（2026-11-07）**：默认 desktop runtime 已接入 `Perceiver`、首次感知确认、角色级 allow/deny 配置、已见记录、独立截屏/运行事件暂停；`MemoryLifecycleService` 通过 `memory/lifecycle.json` 实现删除/降权/冷库/捞回/一次性注入而不改写 L0，`DiaryService` 以隐藏侧车保持 L1 日记不可变。Tauri 新增通用 `runtime_action`，桌面入口覆盖日记/已见、角色封存恢复双确认删除、角色包导入导出、陪伴/工作模式和工具事件提示；角色包包含角色私有 memory/persona/state，并排除 global channels。`tests/test_stage3_integration.py` 验证首次确认、双暂停、生命周期 append-only、一次性注入和角色包唤醒。
+
+**当前验证边界**：本轮全量 Python 回归为 352 passed，Rust `cargo check`、嵌入式前端 JavaScript 语法检查和 `git diff --check` 通过。正式项目验收 corpus、星图真实渲染、后台事件流持续订阅、配置写入面板、preset 升级保护和 TASK.md 全量端到端映射仍需后续验收；这些未被本轮的接口接通替代。阶段1关键运行时闭环（检索融合、决策表达、睡眠调度/打断、巩固反思）已接通并通过回归。
