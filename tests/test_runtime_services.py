@@ -18,11 +18,11 @@ from cether.trigger import TriggerConfig
 class RuntimeServiceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
-        self.registry = RoleRegistry(self.tmp / "registry.json")
+        self.now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        self.registry = RoleRegistry(self.tmp / "registry.json", clock=lambda: self.now)
         self.role = self.registry.create_role("A", self.tmp / "role")
         self.registry.switch(self.role.role_id)
         self.role_context = self.registry.active
-        self.now = datetime(2026, 1, 1, tzinfo=timezone.utc)
         self.metadata = {"theme": "work", "salience": 0.1, "emotion_intensity": 0.1}
         self.services = RuntimeServices(
             role=self.role_context, registry=self.registry,
@@ -71,11 +71,53 @@ class RuntimeServiceTests(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertIn('"emotion_tag": "calm"', records[0])
 
-    def test_unchanged_observation_is_not_archived(self):
+    def test_unchanged_observation_skips_decision_and_expression(self):
+        calls = []
         self.services.perception_provider = lambda: {"description": None, "changed": False}
+        self.services.decision_provider = lambda request: calls.append("decision")
+        self.services.expression_provider = lambda decision, request: calls.append("expression")
         context = self.services.build_pipeline().tick()
         self.assertIsNone(context.l0_id)
         self.assertFalse((self.role.workspace / "memory" / "l0.jsonl").exists())
+        self.assertEqual(context.state["social_battery"], 0.8)
+        self.assertEqual(self.services._state.timestamp, self.now.timestamp())
+        self.assertEqual(calls, [])
+
+    def test_gate_blocks_before_archive_and_model_providers(self):
+        calls = []
+        self.services.gate_reason_provider = lambda _role, _event: "quiet hours"
+        self.services.decision_provider = lambda request: calls.append("decision")
+        self.services.expression_provider = lambda decision, request: calls.append("expression")
+        events = []
+        context = self.services.build_pipeline(event_sink=events.append).tick()
+        self.assertIsNone(context.l0_id)
+        self.assertEqual(calls, [])
+        self.assertIn(("gate", "blocked", "quiet hours"), [(e.stage, e.status, e.detail) for e in events])
+
+    def test_wake_context_is_consumed_once_on_user_turn(self):
+        from cether.wake import WakeState
+
+        WakeState(self.role.workspace).save_snapshot({"topic": "pending"}, self.now)
+        service = RuntimeServices(
+            role=self.role_context, registry=self.registry,
+            trigger_config=TriggerConfig(0.7, 0.7, 3600),
+            perceive=lambda: {"description": "unused", "changed": True},
+            decision=lambda request: None,
+            expression=lambda _decision, _request: None,
+            clock=lambda: self.now,
+        )
+        self.assertIsNotNone(self.registry.pending_wake(self.role.role_id))
+        seen = []
+        service.decision_provider = lambda request: seen.append(request.get("wake_context")) or {"action": "listen"}
+        service.build_pipeline().tick()
+        self.assertIsNotNone(self.registry.pending_wake(self.role.role_id))
+        self.assertEqual(seen, [None])
+        result = service.decide_user_turn(None, service._state)
+        self.assertEqual(result, {"action": "listen"})
+        self.assertIn("pending", seen[1])
+        self.assertIsNone(service.begin_user_turn())
+        self.assertIsNone(self.registry.pending_wake(self.role.role_id))
+        service.close()
 
     def test_soft_refusal_has_configured_recovery(self):
         self.services.expression_provider = lambda decision, request: {"kind": "soft_refusal", "emotion": "calm"}

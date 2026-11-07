@@ -487,8 +487,15 @@ class RoleRegistry:
             os.fsync(stream.fileno())
         os.replace(temp, path)
 
-    def _wake_for(self, cfg: RoleConfig) -> WakePayload | None:
+    def pending_wake(self, role_id: str) -> WakePayload | None:
+        """Return unconsumed wake context for a role without consuming it."""
+        cfg = self._roles.get(role_id)
+        if cfg is None or cfg.archived:
+            raise RoleError(f"unknown role: {role_id}")
         return WakeState(cfg.workspace).pending(self._clock())
+
+    def _wake_for(self, cfg: RoleConfig) -> WakePayload | None:
+        return self.pending_wake(cfg.role_id)
 
     def mark_first_turn_consumed(self, role_id: str) -> None:
         """Consume wake injection only after the first user message begins."""

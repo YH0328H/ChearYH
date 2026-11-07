@@ -144,6 +144,7 @@ class RuntimeSteps:
     sleep_consolidation: Callable[[Any], Any] | None = None
     reflection_calibration: Callable[[Any], Any] | None = None
     retrieval_bias_update: Callable[[Any], Any] | None = None
+    should_process: Callable[[Any], str | None] | None = None
 
 
 class RuntimePipeline:
@@ -258,17 +259,27 @@ class RuntimePipeline:
         if self._was_sleeping:
             self._was_sleeping = False
             self._emit(context, "sleep", "wake", "sleep interval ended")
-            return _replace_context(context, perception=perception)
         context = _replace_context(context, perception=perception)
+        if self._steps.should_process is not None:
+            reason = self._run_stage(context, "gate", lambda: self._steps.should_process(perception))
+            if reason:
+                self._emit(context, "gate", "blocked", str(reason))
+                return context
         l0_id = self._run_stage(context, "l0", lambda: self._steps.append_l0(perception))
+        unchanged = l0_id is None and _event_value(perception, "changed", True) is False
         context = _replace_context(context, l0_id=l0_id)
-        triggered = self._run_stage(context, "trigger", lambda: self._steps.should_trigger_l1(perception, l0_id))
+        triggered = False if unchanged else self._run_stage(
+            context, "trigger", lambda: self._steps.should_trigger_l1(perception, l0_id)
+        )
         context = _replace_context(context, trigger=bool(triggered))
         if triggered:
             narrative = self._run_stage(context, "l1", lambda: self._steps.generate_l1(perception, l0_id))
             context = _replace_context(context, narrative=narrative)
         state = self._run_stage(context, "state", lambda: self._steps.update_state(perception, context.narrative))
         context = _replace_context(context, state=state)
+        if unchanged:
+            self._emit(context, "runtime", "skipped", "observation unchanged; state updated")
+            return context
         decision = self._run_stage(context, "decision", lambda: self._steps.decide(context, state))
         context = _replace_context(context, decision=decision)
         expression = self._run_stage(context, "expression", lambda: self._steps.express(context, decision))
@@ -315,6 +326,12 @@ class RuntimePipeline:
         event = RuntimeEvent(context.tick_id, stage, status, self.role_scope, self._clock(), detail)
         self._events.append(event)
         self._event_sink(event)
+
+
+def _event_value(event: Any, key: str, default: Any = None) -> Any:
+    if isinstance(event, Mapping):
+        return event.get(key, default)
+    return getattr(event, key, default)
 
 
 def _replace_context(context: RuntimeContext, **changes: Any) -> RuntimeContext:

@@ -55,6 +55,7 @@ class RuntimeServices:
         reflection: Callable[[RoleContext, dict[str, Any]], dict[str, Any] | None] | None = None,
         retrieval_index_update: Callable[[RoleContext], Any] | None = None,
         sleep_mode: Callable[[RoleContext, datetime], str] | None = None,
+        gate_reason: Callable[[RoleContext, Any], str | None] | None = None,
     ) -> None:
         if (narrative_config is None) != (narrative_post is None):
             raise ValueError("narrative_config and narrative_post must be supplied together")
@@ -73,10 +74,12 @@ class RuntimeServices:
         self.reflection_provider = reflection
         self.retrieval_index_provider = retrieval_index_update
         self.sleep_mode_provider = sleep_mode
+        self.gate_reason_provider = gate_reason
         self._sleep_mode = "awake"
         self._lock = threading.RLock()
         self._state_path = role.workspace / "state.json"
         self._state = self._load_state()
+        self._pending_wake = self._load_pending_wake()
         self._pipeline: RuntimePipeline | None = None
         self._unregister_canceller = None
         self._closed = False
@@ -115,6 +118,7 @@ class RuntimeServices:
             sleep_consolidation=self._sleep if self.sleep_provider else None,
             reflection_calibration=self._reflect if self.reflection_provider else None,
             retrieval_bias_update=self._update_retrieval_bias if self.retrieval_index_provider else None,
+            should_process=self._gate_reason if self.gate_reason_provider else None,
         )
         self._pipeline = RuntimePipeline(role_scope=self.role.scope_id, scope_guard=self.registry, steps=steps,
                                         config=RuntimeConfig(interval_seconds=interval_seconds), event_sink=event_sink)
@@ -125,6 +129,45 @@ class RuntimeServices:
         if self._pipeline is None:
             return True
         return self._pipeline.cancel(timeout=30.0)
+
+    def pending_wake_context(self) -> str | None:
+        """Render the pending wake context without consuming its one-time injection."""
+        self.registry.ensure_role_scope(self.role.scope_id)
+        payload = self._pending_wake
+        if payload is None:
+            return None
+        from .wake import render_injection
+        return render_injection(payload)
+
+    def begin_user_turn(self) -> str | None:
+        """Return pending wake context once and consume it when a user turn begins."""
+        self.registry.ensure_role_scope(self.role.scope_id)
+        text = self.pending_wake_context()
+        if text is None:
+            return None
+        self.registry.mark_first_turn_consumed(self.role.config.role_id)
+        self._pending_wake = None
+        return text
+
+    def decide_user_turn(self, context: Any, state: StateSnapshot, wake_context: str | None = None) -> Any:
+        """Run a user-initiated decision with optional one-time wake context."""
+        self.registry.ensure_role_scope(self.role.scope_id)
+        wake = self.begin_user_turn() if wake_context is None else wake_context
+        return self.decision_provider({"context": context, "state": state,
+                                       "retrieval_bias": dict(self.retrieval_bias),
+                                       "role": self.role, "wake_context": wake})
+
+    def _load_pending_wake(self):
+        from .roles import RoleRegistry
+
+        if not isinstance(self.registry, RoleRegistry):
+            return None
+        return self.registry.pending_wake(self.role.config.role_id)
+
+    def _gate_reason(self, event: Any) -> str | None:
+        self.registry.ensure_role_scope(self.role.scope_id)
+        reason = self.gate_reason_provider(self.role, event)
+        return str(reason) if reason else None
 
     def _perceive(self) -> Any:
         self.registry.ensure_role_scope(self.role.scope_id)
@@ -186,7 +229,7 @@ class RuntimeServices:
 
     def _feed_result(self, context: Any, expression: Any, state: Any) -> dict[str, Any]:
         """Persist expression battery cost and its emotional residue after expression completes."""
-        if _event_value(context.perception, "sleeping", False):
+        if context is not None and _event_value(getattr(context, "perception", None), "sleeping", False):
             return {"frozen": True}
         kind = str(_event_value(expression, "kind", "full"))
         cfg = self.feedback_config

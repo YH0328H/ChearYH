@@ -166,6 +166,25 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(context.narrative, {"narrative": "story"})
         self.assertEqual(context.result, "fed")
 
+    def test_pipeline_unchanged_observation_updates_state_but_skips_models(self) -> None:
+        calls = []
+        steps = RuntimeSteps(
+            perceive=lambda: {"description": None, "changed": False},
+            append_l0=lambda _event: None,
+            should_trigger_l1=lambda *_args: calls.append("trigger") or True,
+            generate_l1=lambda *_args: calls.append("l1"),
+            update_state=lambda *_args: calls.append("state") or {"updated": True},
+            decide=lambda *_args: calls.append("decision"),
+            express=lambda *_args: calls.append("expression"),
+            feed_result=lambda *_args: calls.append("feedback"),
+        )
+        context = RuntimePipeline(role_scope="role-a", scope_guard=FakeScopeGuard(), steps=steps).tick()
+        self.assertEqual(calls, ["state"])
+        self.assertEqual(context.state, {"updated": True})
+        self.assertFalse(context.trigger)
+        self.assertIsNone(context.decision)
+        self.assertIsNone(context.expression)
+
     def test_pipeline_skips_l1_without_explicit_trigger(self) -> None:
         calls = []
         context = self._pipeline(calls, trigger=False).tick()

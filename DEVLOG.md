@@ -157,7 +157,30 @@
 - ✅ 表达反馈按完整/短回应/软拒绝分别扣减、半档扣减、微量恢复社交电量，并持久化情绪残余；睡眠模式在感知前读取，light/deep 均跳过感知和前台状态演化，浅睡仅调用巩固，深睡另调用反思校准和检索索引更新。
 - ✅ 深睡反思可持久化自我基线、反思 L1 与检索偏置；检索偏置从角色工作区恢复。具体巩固、梦境/反思生成和索引构建算法由注入 provider 承担，尚无项目内置实现。
 - ✅ `RoleRegistry` 增加按角色注册任务取消回调；切换等待同步 tick 收尾，取消超时则回滚。角色状态、心事匣、候选池与唤醒注入组成带 SHA-256 校验的快照包，通过原子 latest 指针发布；启动时验证并恢复各角色最近快照。
-- ✅ `RuntimePipeline` 增加并发互斥、取消等待和睡眠阶段分流；恢复醒来后的首轮只完成唤醒，不执行感知闭环。重启恢复的检索偏置传入决策 provider。新增运行时服务、取消等待、恢复/校验测试。
+- ✅ `RuntimePipeline` 增加并发互斥、取消等待和睡眠阶段分流；当时的实现曾让恢复醒来后的首轮只完成唤醒，不执行感知闭环（行为于 2026-11-06 修正，见下文）。重启恢复的检索偏置传入决策 provider。新增运行时服务、取消等待、恢复/校验测试。
 - ✅ 全量测试：`pytest tests -q --tb=short` **292 passed**。
 
 后续：接入真实决策与表达 provider、具体睡眠巩固/反思算法和检索服务；然后推进 Tauri IPC、视觉面板与端到端验证。
+
+### 运行时验收边界更新（2026-11-06）
+
+- 调整 `RuntimePipeline`：睡眠结束后的首个 awake tick 继续正常处理；无变化观测仍更新角色状态，但跳过 L1 触发与决策/表达/结果反馈；可注入门控在 L0 归档前执行，阻断时无后续模型调用。
+- `RuntimeServices.begin_user_turn()` / `decide_user_turn(...)` 提供显式用户轮次入口：仅该入口获取并消费一次待注入唤醒上下文，并将其传给决策 provider；后台观测 tick 不消费该上下文。
+- 新增 runner 与 runtime service 验收覆盖。本文记录代码状态，不代表本条目后的测试已经运行；最终全量测试结果待本次收口追加。
+- 工作区发现未跟踪平行模块 `src/cether/role.py`、`src/cether/spatial.py` 及相关测试；保留原样。已提交运行时继续使用 `roles.py`、`spatial_index.py`。
+
+## 2026-11-07（周五）
+
+### M1：最小可运行对话纵切完成
+
+- ✅ 新增 `src/cether/providers.py`：本地规则 provider 与 OpenAI-compatible HTTP adapter；配置支持 TOML、超时/温度边界校验，密钥只从环境变量读取。
+- ✅ 新增 `src/cether/conversation.py`：显式用户轮次、单活锁、角色 scope 校验、最近 L0 上下文、会话 JSONL 与 L0 双写、表达反馈写回状态。
+- ✅ 新增 `src/cether/desktop.py`：Python JSON-lines 桥接协议，支持启动、创建/切换角色、发送消息、关闭；每个角色独立运行时与历史空间。
+- ✅ 扩展 `src-tauri/src/lib.rs`：Rust Tauri command 转发到长驻 Python runtime，统一请求 ID、错误返回与子进程生命周期。
+- ✅ 重建 `dist/index.html`：原生响应式聊天界面，角色选择/创建、历史显示、输入发送与错误状态。
+- ✅ 唤醒语义修正：provider 成功且 scope 仍有效后才消费一次性唤醒；provider 错误可重试，不丢待唤醒上下文。
+- ✅ 测试与验证：M1 专项 23 passed；Python 全量 **305 passed**；`cargo check --locked` 通过且无编译警告；内嵌 JavaScript 语法检查通过；JSON-lines 启动、创建、发送、角色切换 E2E 通过。
+
+### M1 后续边界
+
+事件流、状态/记忆可视化面板、真实决策/表达服务接入、配置热加载、检索性能基准和桌面端完整打包仍属于后续阶段；当前工作区未提交，保留既有用户文件与平行实现。
