@@ -183,4 +183,44 @@
 
 ### M1 后续边界
 
-事件流、状态/记忆可视化面板、真实决策/表达服务接入、配置热加载、检索性能基准和桌面端完整打包仍属于后续阶段；当前工作区未提交，保留既有用户文件与平行实现。
+事件流、状态/记忆可视化面板、真实决策/表达服务接入、检索多路融合与性能基准、睡眠/反思具体算法和桌面端完整打包仍属于后续工作；当前工作区包含未提交改动，保留既有用户文件与平行实现。
+
+### 阶段 1 首个切片：角色隔离 L0 词法召回（2026-11-07）
+
+- ✅ 新增 `src/cether/memory_retrieval.py`：基于中文字符/二元组及英文词元构建 BM25，严格校验当前角色 scope，仅返回正分命中；低权重记录不主动注入，归档错误返回空结果（scope 错误继续抛出）。
+- ✅ 在 `src/cether/conversation.py` 将显式用户输入作为检索 query，召回替代“最近八条”机械上下文；向量/图/RRF/乘子暂未接入。
+- ✅ 新增 `config/retrieval.toml` 默认 top-k、BM25 参数及 300ms 预算；`RetrievalConfigWatcher` 支持有效配置变更热加载，解析错误保留最后有效配置；`last_observation` 暴露耗时、超预算、通道、数量和错误。
+- ✅ 新增 `tests/test_memory_retrieval.py` 覆盖正命中、无命中、低权重过滤、scope 失败、存储故障、预算观测、中文分词和配置热加载；调整对话集成断言验证检索内容。
+- ✅ 验证：专项 34 passed；全量 `pytest tests -q --tb=short -x`：**313 passed**。
+- ✅ 阶段 1 检索融合切片（续）：`memory_retrieval.py` 增加加权 RRF、可注入 embedding/图/spatial provider、向量按文档文本缓存、乘子与六位编码排序；低权重不注入，高权重只接受 spatial provider 候选。TOML 热加载覆盖通道权重、跳数、权重带、生命周期/反刍/驱力映射、区域、jitter、hexbit 与延迟预算。L0 仍仅有 normal/low 标注，故高权重需后续上游分类和空间索引接通；语义 provider 未配置时明确关闭。
+- ✅ 新增 `benchmarks/retrieval_baseline.py`：合成 1000–3000 条热库与查询的本机同步路径 P50/P95/P99 输出。1000 条/50 查询：17.325/24.293/27.071ms，max 27.297ms，0/50 超 300ms；该合成数据不等于任务书验收语料，外部 embedding 延迟也不在此测量范围。
+- ✅ 检索融合专项测试：38 passed（BM25、scope、低权重、配置热加载、加权 RRF、向量/图注入、空间路由、延迟与重复召回评分）。
+- ⏭ 当时下一步：继续核查/优化融合实现并跑 2000 条及全量回归；接通真实决策/表达 provider、睡眠分层/巩固与反思算法及 runtime。以下记录后续进展。
+
+### 阶段 1 运行时接通续（2026-11-07）
+
+- ✅ 新增 `src/cether/cognition.py` 与 `config/cognition.toml`：桌面默认使用本地确定性决策/表达 provider，结合闸门、睡眠、社交电量和表达冲动给出决定；未替换独立对话模型 provider。
+- ✅ 新增 `src/cether/sleep.py` 与 `config/sleep.toml`：浅睡生成相似 L0 合并候选并调用索引回调，不改写 append-only L0；深睡按证据阈值输出抽取式反思、状态基线校准和检索偏置，并仅在有足够低权重来源时生成带 source L0 IDs 的梦境 L1。
+- ✅ `desktop.py` 默认 RuntimeServices 已装配以上 provider；反思 L1 由 RuntimeServices 单点写入，来源为空时跳过，避免重复/不可追溯条目；睡眠索引刷新不重复运行巩固。
+- ✅ 验证：聚焦 cognition/sleep/desktop/runtime 32 passed；全量 `pytest tests benchmarks/test_retrieval_baseline.py -q --tb=short -x`：**328 passed**（10.70s）。
+- ✅ 检索索引缓存按 L0 文件 mtime/size 失效：热查询复用解析记录、词元与 BM25 索引，追加后重建；新增追加失效回归测试。优化前观察到 1/100 查询超过 300ms，定位为每轮重建索引。
+- ✅ 缓存后检索基准 2000 条/100 查询：P50 7.075ms / P95 9.077ms / P99 10.613ms / max 11.522ms，0/100 超 300ms；仍是合成 corpus，语义 provider 关闭，不作为验收结论。
+- ✅ 全量 `pytest tests benchmarks/test_retrieval_baseline.py -q --tb=short -x`：**329 passed**（11.42s）。
+- ✅ 角色本地 `SpatialMemoryProvider` 已由 desktop 默认装配：高权重记录同步到持久化固定房间/桩位索引，查询只用词元重叠作为激活条件，再按固定巡游路线返回；scope 切换会拒绝旧 provider。
+- ✅ embedding 适配增加批量请求与维度/index 校验；桌面从 `config/embedding.toml` 读取 endpoint，只有 `CETHER_EMBED_API_KEY` 存在时启用，当前环境未配置 key，因此没有伪造语义通道。
+- ✅ `LocalCooccurrenceGraphProvider` 已默认装配：从角色 normal L0 记录构建确定性共现图，图扩散按 query seed 返回 role-local 关联记忆，并在角色切换时执行 scope 校验。
+- ✅ 新增 `memory_tiering.py`：依据手动标记、flash 标记、情绪强度、显著性和关系事件进行确定性高/中/低分类；L0 仍保持 `normal`/`low` 粗粒度 append-only 格式，高层分类写入 `tier_metadata`，检索按该元数据进入空间高权重路径。
+- ✅ 睡眠交互打断已接入：用户 turn 会标记当前轻/深睡眠为 interrupted，下一次 pipeline tick 恢复 awake 且跳过睡眠后台任务；覆盖 light/deep 路由、反思/索引不重复执行和全量回归。
+- ✅ 新增 `sleep_schedule.py` 和 `[sleep_schedule]` TOML 配置：支持启用开关、跨午夜 light/deep 时间窗、idle 阈值；desktop 默认装配，关闭时保持 awake，配置与边界测试通过。
+- ✅ 新增 `test_phase1_e2e.py`：验证高权重感知事件写入 tier metadata 后进入 spatial 召回并注入对话上下文；验证 deep sleep 生成带 L0 来源的 reflection/dream、更新 baseline 与 retrieval bias。全量测试达到 344 项。
+- ✅ provider/空间专项回归 34 passed。全量回归待本轮最后执行。
+- ✅ 阶段 1运行时闭环完成：图 provider、高权重 tier metadata、睡眠调度/交互打断与阶段 E2E 已接通；全量回归达到 344 项。正式验收 corpus 与 TASK.md 全量映射仍保留为后续验收工作。
+
+### 阶段 2：桌面端整合（2026-11-07）
+
+- ✅ `src/cether/desktop.py` 扩展为稳定桌面动作面：状态快照、角色卡、自然语言状态、记忆时间轴、看一眼、暂停感知、手动记忆、角色切换进度与唤醒待注入状态均通过 JSON-lines bridge 暴露。
+- ✅ `src-tauri/src/lib.rs` 增加 `ui_action` 与 `memory_timeline` command，继续复用统一请求 ID、错误返回和 Python runtime 生命周期。
+- ✅ `dist/index.html` 重建为透明陪伴壳：拖拽标题栏、角色切换/创建、陪伴动画状态、聊天气泡、导航抽屉、记忆面板、状态面板、工作/配置入口、内联错误反馈和快捷动作。
+- ✅ 手动记忆沿用 L0 append-only 约束，并写入可追溯的 `memory_tier=high` 元数据；角色切换继续由 `RoleRegistry` 的单活事务和 wake injection 管理。
+- ✅ 新增 `tests/test_desktop_ui.py` 覆盖 bootstrap 状态、动作反馈、角色本地时间轴和切换进度；桌面桥接专项与全量回归均通过。
+- ⚠️ 当前阶段交付的是可运行桌面整合壳；星图渲染、冷库完整交互、后台事件流和配置写入面板仍需后续迭代。

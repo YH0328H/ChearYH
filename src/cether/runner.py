@@ -294,6 +294,9 @@ class RuntimePipeline:
             mode = context.perception.get("sleep_mode", mode)
         if mode not in {"light", "deep"}:
             return context
+        if isinstance(context.perception, dict) and context.perception.get("sleep_interrupted"):
+            self._emit(context, "sleep", "interrupted", str(context.perception.get("interrupted_sleep_mode", mode)))
+            return context
         operations = [("sleep_consolidation", self._steps.sleep_consolidation)]
         if mode == "deep":
             operations.extend((

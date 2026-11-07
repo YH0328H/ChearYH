@@ -11,6 +11,7 @@ from cether.retrieval import (  # noqa: E402
     Document,
     EmbeddingConfig,
     EmbeddingError,
+    embed_texts,
     GraphEdge,
     GraphNode,
     GraphRetrieval,
@@ -84,6 +85,13 @@ class EmbeddingTests(unittest.TestCase):
         vector = embed_text(cfg, "test", post)
         self.assertEqual(len(vector), 1024)
         self.assertEqual(seen, [("https://x.test/v1/embeddings", "m-1")])
+
+    def test_embed_texts_batches_and_orders_by_index(self) -> None:
+        cfg = EmbeddingConfig("https://x.test/v1", "m-1", "k-test", 2)
+        def post(_url, body, _headers):
+            self.assertEqual(body["input"], ["a", "b"])
+            return {"data": [{"index": 1, "embedding": [0.0, 1.0]}, {"index": 0, "embedding": [1.0, 0.0]}]}
+        self.assertEqual(embed_texts(cfg, ["a", "b"], post), [[1.0, 0.0], [0.0, 1.0]])
 
     def test_embed_missing_key_raises(self) -> None:
         cfg = EmbeddingConfig("https://x.test/v1", "m-1", "", 1024)

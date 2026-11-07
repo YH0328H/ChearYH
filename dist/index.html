@@ -3,74 +3,48 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#f5f3ed">
-  <title>Cether · 会话</title>
+  <meta name="theme-color" content="#101916">
+  <title>Cether · 陪伴</title>
   <style>
-    :root{font-family:Inter,"Microsoft YaHei",sans-serif;color:#252b29;background:#f5f3ed;font-synthesis:none;text-rendering:optimizeLegibility}
-    *{box-sizing:border-box}body{margin:0;min-width:300px;height:100vh;display:flex;flex-direction:column;background:#f5f3ed}
-    header{height:62px;display:flex;align-items:center;gap:12px;padding:0 18px;border-bottom:1px solid #deded6;background:#fbfaf7}
-    .mark{width:30px;height:30px;border-radius:8px;background:#427c68;color:white;display:grid;place-items:center;font-size:15px;font-weight:700}
-    .identity{min-width:0;flex:1}.identity strong{display:block;font-size:14px;font-weight:650}.identity small{display:block;color:#7a827e;font-size:11px;margin-top:3px}
-    select,button,textarea{font:inherit;color:inherit}select{max-width:130px;border:1px solid #d9ddd7;background:#fff;border-radius:6px;padding:7px 24px 7px 9px;font-size:12px}
-    button{border:0;cursor:pointer}.icon-btn{width:32px;height:32px;background:transparent;border-radius:6px;color:#52625a;font-size:18px}.icon-btn:hover{background:#edf1ed}
-    main{flex:1;overflow:auto;padding:18px 14px;display:flex;flex-direction:column;gap:14px}.empty{margin:auto;text-align:center;color:#78817c;font-size:13px}.empty b{display:block;color:#48534d;font-size:16px;margin-bottom:7px;font-weight:600}
-    .message{max-width:min(86%,620px);display:flex;flex-direction:column;gap:5px}.message.user{align-self:flex-end;align-items:flex-end}.message.assistant{align-self:flex-start}
-    .bubble{padding:10px 12px;border-radius:10px;background:#fff;border:1px solid #e2e3dc;font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}.user .bubble{background:#e1eee7;border-color:#d4e5db}.meta{font-size:10px;color:#858d88;padding:0 3px}
-    footer{padding:10px 12px 14px;border-top:1px solid #deded6;background:#fbfaf7}.composer{display:flex;align-items:flex-end;gap:8px;background:white;border:1px solid #d9ddd7;border-radius:9px;padding:7px}.composer:focus-within{border-color:#83a996;box-shadow:0 0 0 2px #dce9e1}
-    textarea{resize:none;flex:1;min-height:38px;max-height:110px;border:0;outline:0;padding:8px 4px;font-size:13px;line-height:1.45;background:transparent}.send{width:34px;height:34px;flex:none;background:#427c68;color:#fff;border-radius:7px;font-size:17px}.send:disabled{opacity:.45;cursor:wait}.status{min-height:15px;padding:5px 3px 0;font-size:10px;color:#7d8580}.status.error{color:#a54f42}
-    @media(min-width:700px){body{max-width:720px;margin:0 auto;border-left:1px solid #e3e1d9;border-right:1px solid #e3e1d9}main{padding:24px 28px}footer{padding:12px 24px 18px}}
+    :root{font-family:Inter,"Microsoft YaHei",sans-serif;color:#e9f0eb;background:#101916;font-synthesis:none;text-rendering:optimizeLegibility;--panel:#16221e;--line:#2b3b35;--muted:#8fa49a;--accent:#8ed1ae;--warm:#e4b878}
+    *{box-sizing:border-box}body{margin:0;min-width:320px;height:100vh;overflow:hidden;background:radial-gradient(circle at 50% 18%,#233c32 0,#101916 48%,#0b100e 100%);color:#e9f0eb}
+    button,select,textarea{font:inherit;color:inherit}button{border:0;cursor:pointer}.app{height:100%;display:flex;flex-direction:column;position:relative}
+    header{height:58px;display:flex;align-items:center;gap:10px;padding:0 14px;background:rgba(16,25,22,.84);border-bottom:1px solid rgba(142,209,174,.16);backdrop-filter:blur(16px);-webkit-app-region:drag}.header-action,.role-select{ -webkit-app-region:no-drag}.header-action{width:32px;height:32px;border-radius:8px;background:transparent;color:var(--muted);font-size:18px}.header-action:hover{background:#22332c;color:#fff}.identity{min-width:0;flex:1}.identity strong{display:block;font-size:14px;font-weight:650}.identity small{display:block;color:var(--muted);font-size:11px;margin-top:3px}.role-select{max-width:130px;background:#1d2b25;border:1px solid var(--line);border-radius:7px;padding:6px 20px 6px 8px;font-size:11px}
+    .layout{display:flex;min-height:0;flex:1}.drawer{width:0;overflow:hidden;transition:width .2s ease;background:#13201b;border-right:1px solid var(--line);z-index:4}.drawer.open{width:245px;padding:16px}.drawer h2{font-size:14px;margin:0 0 14px}.drawer button,.drawer .nav-item{width:100%;text-align:left;padding:9px 10px;background:transparent;border-radius:7px;color:#bdcfc5;font-size:12px}.drawer button:hover,.drawer .nav-item:hover,.drawer button.active{background:#21332b;color:#fff}.drawer-section{border-top:1px solid var(--line);margin-top:13px;padding-top:12px}.drawer-label{font-size:10px;color:#6f877b;margin:4px 10px 7px}
+    .content{min-width:0;flex:1;display:flex;flex-direction:column}.companion{position:relative;min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 14px 12px;text-align:center}.portrait{width:86px;height:86px;border:1px solid rgba(142,209,174,.34);border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#284c3c,#182820);box-shadow:0 0 38px rgba(142,209,174,.12);font-size:32px;color:#b5e7c9;animation:float 4s ease-in-out infinite}.portrait.thinking{animation:pulse 1.1s ease-in-out infinite}.portrait.sleeping{opacity:.55;filter:saturate(.5)}.companion h1{font-size:17px;margin:11px 0 4px;font-weight:600}.state-line{font-size:11px;color:var(--muted);max-width:90%;line-height:1.5}.thought{max-width:88%;margin-top:9px;font-size:12px;color:#c5d8cc;min-height:18px}.content-view{display:none;flex:1;min-height:0;overflow:auto;padding:18px}.content-view.active{display:block}.panel-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.panel-title h2{font-size:16px;margin:0}.panel-title small{color:var(--muted);font-size:11px}.card{background:rgba(22,34,30,.83);border:1px solid var(--line);border-radius:9px;padding:12px;margin-bottom:9px}.memory-item{display:flex;gap:9px;align-items:flex-start}.memory-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:5px;flex:none}.memory-copy{min-width:0}.memory-copy strong{display:block;font-size:12px;font-weight:550;line-height:1.5}.memory-copy small{color:var(--muted);font-size:10px}.notice{font-size:11px;color:var(--warm);line-height:1.5}
+    .messages{flex:1;min-height:0;overflow:auto;padding:14px 14px 5px;display:flex;flex-direction:column;gap:10px}.empty{margin:auto;text-align:center;color:#8fa49a;font-size:12px;line-height:1.7}.empty b{display:block;color:#dcebe1;font-size:16px;margin-bottom:6px;font-weight:600}.message{max-width:min(88%,620px);display:flex;flex-direction:column;gap:4px}.message.user{align-self:flex-end;align-items:flex-end}.message.assistant{align-self:flex-start}.bubble{padding:9px 11px;border-radius:10px;background:#17251f;border:1px solid #2b3c34;font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}.user .bubble{background:#285343;border-color:#3f795f}.meta{font-size:10px;color:#71867b;padding:0 3px}
+    footer{padding:9px 12px 12px;border-top:1px solid rgba(142,209,174,.16);background:rgba(16,25,22,.9)}.composer{display:flex;align-items:flex-end;gap:7px;background:#17251f;border:1px solid #31463c;border-radius:9px;padding:6px}.composer:focus-within{border-color:#78b897;box-shadow:0 0 0 2px rgba(120,184,151,.12)}textarea{resize:none;flex:1;min-height:35px;max-height:108px;border:0;outline:0;padding:7px 4px;font-size:13px;line-height:1.45;background:transparent}.send{width:34px;height:34px;flex:none;background:#69ad89;color:#102117;border-radius:7px;font-size:17px}.send:disabled{opacity:.45;cursor:wait}.status{min-height:15px;padding:5px 3px 0;font-size:10px;color:#83998e}.status.error{color:#eb9e8f}.quick-row{display:flex;justify-content:center;gap:7px;margin-top:11px}.quick{background:#1a2b23;border:1px solid #31463c;border-radius:999px;padding:6px 10px;color:#aac4b4;font-size:10px}.quick:hover{background:#274237;color:#fff}.backdrop{display:none}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}@keyframes pulse{0%,100%{box-shadow:0 0 20px rgba(228,184,120,.12)}50%{box-shadow:0 0 42px rgba(228,184,120,.34)}}
+    @media(min-width:700px){body{max-width:760px;margin:0 auto;border-left:1px solid #263730;border-right:1px solid #263730}.messages{padding:18px 28px 8px}.companion{min-height:220px}footer{padding:12px 24px 16px}}
   </style>
 </head>
 <body>
-  <header>
-    <div class="mark">C</div>
-    <div class="identity"><strong id="roleName">Cether</strong><small id="roleState">正在连接运行时</small></div>
-    <select id="roles" aria-label="当前角色"></select>
-    <button class="icon-btn" id="addRole" title="创建角色" aria-label="创建角色">＋</button>
-  </header>
-  <main id="messages" aria-live="polite"><div class="empty" id="empty"><b>开始一段对话</b>发出的消息会保存在当前角色的独立空间</div></main>
-  <footer>
-    <div class="composer"><textarea id="input" rows="1" placeholder="写一条消息…" aria-label="消息"></textarea><button class="send" id="send" aria-label="发送消息" title="发送">↑</button></div>
-    <div class="status" id="status"></div>
-  </footer>
-  <script>
-    const invoke = window.__TAURI__?.core?.invoke;
-    const messages = document.querySelector('#messages');
-    const input = document.querySelector('#input');
-    const sendButton = document.querySelector('#send');
-    const status = document.querySelector('#status');
-    let busy = false;
-    function showStatus(text='', error=false){status.textContent=text;status.classList.toggle('error',error)}
-    function renderTurn(turn){
-      document.querySelector('#empty')?.remove();
-      const row=document.createElement('article');row.className='message '+(turn.role==='user'?'user':'assistant');
-      const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=turn.text;
-      const meta=document.createElement('div');meta.className='meta';meta.textContent=turn.role==='user'?'你':(turn.emotion||'回应');
-      row.append(bubble,meta);messages.append(row);messages.scrollTop=messages.scrollHeight;
-    }
-    function applyState(data){
-      const role=data.active_role;document.querySelector('#roleName').textContent=role?.name||'Cether';
-      document.querySelector('#roleState').textContent=role?'当前角色':'未选择角色';
-      const select=document.querySelector('#roles');select.replaceChildren();
-      for(const item of data.roles||[]){const option=document.createElement('option');option.value=item.role_id;option.textContent=item.name;option.selected=item.role_id===role?.role_id;select.append(option)}
-      messages.replaceChildren();for(const turn of data.history||[])renderTurn(turn);
-    }
-    async function bootstrap(){
-      if(!invoke){showStatus('Tauri IPC 未连接',true);document.querySelector('#roleState').textContent='桌面运行时不可用';return}
-      try{applyState(await invoke('app_bootstrap'))}catch(error){showStatus(String(error),true)}
-    }
-    async function send(){
-      const text=input.value.trim();if(!text||busy)return;busy=true;sendButton.disabled=true;showStatus('正在回应…');
-      renderTurn({role:'user',text});input.value='';input.style.height='auto';
-      try{const result=await invoke('send_message',{text});renderTurn(result.turn);showStatus('已保存到当前角色')}
-      catch(error){showStatus(String(error),true)}finally{busy=false;sendButton.disabled=false;input.focus()}
-    }
-    sendButton.addEventListener('click',send);
-    input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}});
-    input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,110)+'px'});
-    document.querySelector('#roles').addEventListener('change',async event=>{try{applyState(await invoke('switch_role',{roleId:event.target.value}));showStatus('已切换角色')}catch(error){showStatus(String(error),true);bootstrap()}});
-    document.querySelector('#addRole').addEventListener('click',async()=>{const name=prompt('新角色名称');if(!name?.trim())return;try{applyState(await invoke('create_role',{name:name.trim()}));showStatus('角色已创建')}catch(error){showStatus(String(error),true)}});
-    bootstrap();
-  </script>
+<div class="app">
+  <header><button class="header-action" id="menu" title="打开导航" aria-label="打开导航">☰</button><div class="identity"><strong id="roleName">Cether</strong><small id="roleState">正在连接运行时</small></div><select class="role-select" id="roles" aria-label="当前角色"></select><button class="header-action" id="addRole" title="创建角色" aria-label="创建角色">＋</button></header>
+  <div class="layout"><aside class="drawer" id="drawer"><h2>陪伴空间</h2><button class="nav-item active" data-view="companion">陪伴与聊天</button><button class="nav-item" data-view="memories">记忆面板</button><button class="nav-item" data-view="status">它现在怎么样</button><div class="drawer-section"><div class="drawer-label">角色</div><button id="drawerCreate">创建角色</button></div><div class="drawer-section"><div class="drawer-label">模式</div><button class="nav-item" data-view="work">工作模式</button><button class="nav-item" data-view="settings">配置状态</button></div></aside>
+    <section class="content"><div class="companion" id="companion"><div class="portrait" id="portrait">C</div><h1 id="companionName">Cether</h1><div class="state-line" id="stateLine">正在载入状态</div><div class="thought" id="thought"></div><div class="quick-row"><button class="quick" id="lookNow">看一眼</button><button class="quick" id="remember">让它记住</button><button class="quick" id="showStatus">状态</button></div></div>
+      <main class="messages" id="messages" aria-live="polite"><div class="empty" id="empty"><b>在这里陪你</b>发出的消息会保存在当前角色的独立空间</div></main>
+      <section class="content-view" id="memories"><div class="panel-title"><h2>记忆面板</h2><small id="memoryCount"></small></div><div id="memoryList"></div></section>
+      <section class="content-view" id="status"><div class="panel-title"><h2>它现在怎么样</h2><small>当前角色</small></div><div class="card"><div class="notice" id="statusDetail">正在读取状态</div></div><div class="card"><div class="drawer-label">心事匣</div><div id="mindBox" class="notice">暂无记录</div></div></section>
+      <section class="content-view" id="work"><div class="panel-title"><h2>工作模式</h2><small>长文与代码保留在当前会话</small></div><div class="card notice">工作模式的文件卡片与后台通道将在后续阶段接入。当前对话仍归属于活跃角色。</div></section>
+      <section class="content-view" id="settings"><div class="panel-title"><h2>配置状态</h2><small>只读运行时摘要</small></div><div class="card notice">角色工作区、模型通道与记忆服务由 CetherYH 主链路管理。凭证仅留在宿主侧。</div></section>
+      <footer><div class="composer"><textarea id="input" rows="1" placeholder="写一条消息…" aria-label="消息"></textarea><button class="send" id="send" aria-label="发送消息" title="发送">↑</button></div><div class="status" id="statusLine"></div></footer>
+    </section>
+  </div>
+</div>
+<script>
+  const invoke=window.__TAURI__?.core?.invoke;const $=selector=>document.querySelector(selector);const messages=$('#messages'),input=$('#input'),sendButton=$('#send'),statusLine=$('#statusLine');let busy=false;let appState=null;
+  function showStatus(text='',error=false){statusLine.textContent=text;statusLine.classList.toggle('error',error)}
+  function invokeOrFail(command,args){if(!invoke) return Promise.reject(new Error('Tauri IPC 未连接'));return invoke(command,args)}
+  function renderTurn(turn){$('#empty')?.remove();const row=document.createElement('article');row.className='message '+(turn.role==='user'?'user':'assistant');const bubble=document.createElement('div');bubble.className='bubble';bubble.textContent=turn.text;const meta=document.createElement('div');meta.className='meta';meta.textContent=turn.role==='user'?'你':(turn.emotion||'回应');row.append(bubble,meta);messages.append(row);messages.scrollTop=messages.scrollHeight}
+  function applyState(data){appState=data;const role=data.active_role;$('#roleName').textContent=role?.name||'Cether';$('#companionName').textContent=role?.name||'Cether';$('#roleState').textContent=role?'当前角色 · 独立工作区':'未选择角色';const select=$('#roles');select.replaceChildren();for(const item of data.roles||[]){const option=document.createElement('option');option.value=item.role_id;option.textContent=item.name;option.selected=item.role_id===role?.role_id;select.append(option)}messages.replaceChildren();if(!(data.history||[]).length)messages.innerHTML='<div class="empty" id="empty"><b>在这里陪你</b>发出的消息会保存在当前角色的独立空间</div>';else for(const turn of data.history)renderTurn(turn);applyView(data.view||{})}
+  function applyView(view){const active=view.active_role;const status=view.status;$('#stateLine').textContent=status?.texture||'状态暂不可用';$('#statusDetail').textContent=[status?.texture,status?.gate_reason?`闸门：${status.gate_reason}`:'闸门：当前未阻塞',status?.sleep_status||'清醒',status?.window_status||'未配置主动窗口'].join(' · ');$('#mindBox').textContent=(status?.mind_box||[]).join('；')||'暂无记录';const portrait=$('#portrait');portrait.classList.toggle('sleeping',status?.sleep_status?.includes('睡'));portrait.classList.toggle('thinking',false);if(active)$('#companionName').textContent=active.name}
+  async function bootstrap(){try{applyState(await invokeOrFail('app_bootstrap'))}catch(error){showStatus(String(error),true);$('#roleState').textContent='桌面运行时不可用'}}
+  async function send(){const text=input.value.trim();if(!text||busy)return;busy=true;sendButton.disabled=true;showStatus('正在回应…');renderTurn({role:'user',text});input.value='';input.style.height='auto';$('#portrait').classList.add('thinking');try{const result=await invokeOrFail('send_message',{text});renderTurn(result.turn);showStatus('已保存到当前角色')}catch(error){showStatus(String(error),true)}finally{$('#portrait').classList.remove('thinking');busy=false;sendButton.disabled=false;input.focus()}}
+  async function uiAction(action,payload={}){try{const result=await invokeOrFail('ui_action',{action,payload});applyView(result.view||{});showStatus(result.feedback?.message||'已完成',!result.accepted)}catch(error){showStatus(String(error),true)}}
+  async function loadMemories(){try{const page=await invokeOrFail('memory_timeline',{limit:100});$('#memoryCount').textContent=`共 ${page.total||0} 条`;const list=$('#memoryList');list.replaceChildren();for(const item of page.records||[]){const card=document.createElement('div');card.className='card memory-item';card.innerHTML='<span class="memory-dot"></span><div class="memory-copy"><strong></strong><small></small></div>';card.querySelector('strong').textContent=item.text||'';card.querySelector('small').textContent=`${item.source||'unknown'} · ${item.weight||'normal'}`;list.append(card)}}catch(error){showStatus(String(error),true)}}
+  function openView(name){$('.content-view.active')?.classList.remove('active');if(name==='companion'){$('#companion').style.display='flex';messages.style.display='flex';$('footer').style.display='block'}else{$('#companion').style.display='none';messages.style.display='none';$('footer').style.display='none';$(`#${name}`)?.classList.add('active');if(name==='memories')loadMemories()}$('#drawer').classList.remove('open');document.querySelectorAll('.nav-item').forEach(item=>item.classList.toggle('active',item.dataset.view===name))}
+  $('#menu').addEventListener('click',()=>$('#drawer').classList.toggle('open'));document.querySelectorAll('.nav-item').forEach(item=>item.addEventListener('click',()=>openView(item.dataset.view)));$('#send').addEventListener('click',send);input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}});input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,108)+'px'});$('#lookNow').addEventListener('click',()=>uiAction('look_now'));$('#showStatus').addEventListener('click',()=>openView('status'));$('#remember').addEventListener('click',()=>{const text=prompt('要记住什么？');if(text?.trim())uiAction('remember_this',{text:text.trim()})});$('#roles').addEventListener('change',async event=>{try{applyState(await invokeOrFail('switch_role',{roleId:event.target.value}));showStatus('角色已切换')}catch(error){showStatus(String(error),true);bootstrap()}});async function createRole(){const name=prompt('新角色名称');if(!name?.trim())return;try{applyState(await invokeOrFail('create_role',{name:name.trim()}));showStatus('角色已创建')}catch(error){showStatus(String(error),true)}}$('#addRole').addEventListener('click',createRole);$('#drawerCreate').addEventListener('click',createRole);bootstrap();
+</script>
 </body>
 </html>

@@ -1,0 +1,23 @@
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+MODULE_PATH = Path(__file__).with_name("retrieval_baseline.py")
+SPEC = importlib.util.spec_from_file_location("retrieval_baseline", MODULE_PATH)
+assert SPEC and SPEC.loader
+BASELINE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(BASELINE)
+
+
+def test_percentile_interpolation() -> None:
+    assert BASELINE.percentile([1.0, 2.0, 3.0, 4.0], 50) == 2.5
+
+
+def test_baseline_reports_hot_path_metrics() -> None:
+    result = BASELINE.run(records_count=1000, query_count=5)
+    assert result["records"] == 1000
+    assert result["queries"] == 5
+    assert 0 <= result["p50_ms"] <= result["p99_ms"]
+    assert result["corpus"] == "synthetic local L0; not acceptance corpus"
+    assert result["semantic_provider"] == "disabled"

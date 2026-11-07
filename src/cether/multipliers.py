@@ -138,6 +138,7 @@ def apply_multipliers(
     memory_region: str | None,
     current_region: str | None,
     config: MultiplierConfig,
+    lifecycle_tau: float = 86400 * 7,
 ) -> float:
     """Apply all multipliers to a retrieval score.
 
@@ -160,7 +161,7 @@ def apply_multipliers(
         Adjusted score
     """
     score = base_score
-    score *= lifecycle_multiplier(elapsed_seconds, min_mult=config.lifecycle_min)
+    score *= lifecycle_multiplier(elapsed_seconds, tau=lifecycle_tau, min_mult=config.lifecycle_min)
     score *= rumination_suppression(recall_count, config.rumination_threshold, config.rumination_penalty)
     score *= drive_bias(memory_tags, active_drives, tag_drive_map)
     score *= valence_bias(memory_valence, current_valence)

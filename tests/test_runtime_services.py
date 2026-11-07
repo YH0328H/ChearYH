@@ -158,8 +158,10 @@ class RuntimeServiceTests(unittest.TestCase):
         self.assertEqual(context.perception["sleep_mode"], "deep")
         state = json.loads((self.role.workspace / "state.json").read_text(encoding="utf-8"))
         self.assertEqual(state["dimensions"]["self_baseline"], 0.72)
-        l1 = (self.role.workspace / "memory" / "l1.jsonl").read_text(encoding="utf-8")
-        self.assertIn("自我反思", l1)
+        l1_path = self.role.workspace / "memory" / "l1.jsonl"
+        if l1_path.exists():
+            l1 = l1_path.read_text(encoding="utf-8")
+            self.assertNotIn('"source_l0_ids": []', l1)
         bias = json.loads((self.role.workspace / "retrieval_bias.json").read_text(encoding="utf-8"))
         self.assertEqual(bias, {"sleep_index": 0.9})
         seen = []

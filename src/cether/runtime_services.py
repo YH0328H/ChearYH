@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .l0 import L0Archive
+from .memory_tiering import classify_memory_tier
 from .l1 import L1Archive, L1Record
 from .narrative import NarrativeConfig, Post, generate_narrative
 from .roles import RoleContext, RoleRegistry
@@ -54,6 +55,9 @@ class RuntimeServices:
         sleep_consolidation: Callable[[RoleContext, dict[str, Any]], Any] | None = None,
         reflection: Callable[[RoleContext, dict[str, Any]], dict[str, Any] | None] | None = None,
         retrieval_index_update: Callable[[RoleContext], Any] | None = None,
+        spatial_provider: Callable[[str, list[dict]], list[Any]] | None = None,
+        embedding_provider: Callable[[list[str]], list[list[float]]] | None = None,
+        graph_provider: Callable[[list[dict]], Any] | None = None,
         sleep_mode: Callable[[RoleContext, datetime], str] | None = None,
         gate_reason: Callable[[RoleContext, Any], str | None] | None = None,
     ) -> None:
@@ -73,9 +77,16 @@ class RuntimeServices:
         self.sleep_provider = sleep_consolidation
         self.reflection_provider = reflection
         self.retrieval_index_provider = retrieval_index_update
+        self.spatial_provider = spatial_provider
+        self.embedding_provider = embedding_provider
+        self.graph_provider = graph_provider
         self.sleep_mode_provider = sleep_mode
         self.gate_reason_provider = gate_reason
         self._sleep_mode = "awake"
+        self._sleep_active = False
+        self._sleep_interrupted = False
+        self._sleep_interrupted_mode: str | None = None
+        self._last_gate_reason: str | None = None
         self._lock = threading.RLock()
         self._state_path = role.workspace / "state.json"
         self._state = self._load_state()
@@ -112,7 +123,8 @@ class RuntimeServices:
             update_state=self._update_state,
             decide=lambda context, state: self.decision_provider({"context": context, "state": state,
                                                                   "retrieval_bias": dict(self.retrieval_bias),
-                                                                  "role": self.role}),
+                                                                  "role": self.role,
+                                                                  "gate_reason": self._last_gate_reason}),
             express=lambda context, decision: self.expression_provider(decision, {"context": context, "role": self.role}),
             feed_result=self._feed_result,
             sleep_consolidation=self._sleep if self.sleep_provider else None,
@@ -140,8 +152,12 @@ class RuntimeServices:
         return render_injection(payload)
 
     def begin_user_turn(self) -> str | None:
-        """Return pending wake context once and consume it when a user turn begins."""
+        """Return pending wake context once and interrupt a scheduled sleep mode."""
         self.registry.ensure_role_scope(self.role.scope_id)
+        if self._sleep_active and self._sleep_mode in {"light", "deep"}:
+            self._sleep_interrupted = True
+            self._sleep_interrupted_mode = self._sleep_mode
+            self._sleep_mode = "awake"
         text = self.pending_wake_context()
         if text is None:
             return None
@@ -166,15 +182,23 @@ class RuntimeServices:
 
     def _gate_reason(self, event: Any) -> str | None:
         self.registry.ensure_role_scope(self.role.scope_id)
+        self._last_gate_reason = None
         reason = self.gate_reason_provider(self.role, event)
-        return str(reason) if reason else None
+        self._last_gate_reason = str(reason) if reason else None
+        return self._last_gate_reason
 
     def _perceive(self) -> Any:
         self.registry.ensure_role_scope(self.role.scope_id)
         mode = self.sleep_mode_provider(self.role, self.clock()) if self.sleep_mode_provider else "awake"
         self._sleep_mode = str(mode)
-        if mode in {"light", "deep"}:
+        self._sleep_active = self._sleep_mode in {"light", "deep"}
+        if mode in {"light", "deep"} and not self._sleep_interrupted:
             return {"sleeping": True, "sleep_mode": mode}
+        if self._sleep_interrupted:
+            self._sleep_interrupted = False
+            interrupted_mode = self._sleep_interrupted_mode
+            self._sleep_interrupted_mode = None
+            return {"sleeping": False, "sleep_mode": "awake", "sleep_interrupted": True, "interrupted_sleep_mode": interrupted_mode}
         event = self.perception_provider()
         if isinstance(event, dict):
             return {**event, "sleep_mode": mode}
@@ -186,8 +210,15 @@ class RuntimeServices:
             return None
         metadata = self.event_metadata(event)
         source = str(metadata.get("source", "perception"))
-        weight = str(metadata.get("weight", "normal"))
-        return self._l0.append(text, source, weight)
+        requested_weight = str(metadata.get("weight", "normal"))
+        if requested_weight == "low":
+            weight = "low"
+        else:
+            tier = classify_memory_tier(metadata)
+            weight = "normal"
+            if tier == "high":
+                metadata = {**metadata, "memory_tier": "high"}
+        return self._l0.append(text, source, weight, metadata=metadata)
 
     def _trigger(self, event: Any, l0_id: str | None) -> bool:
         if not l0_id:
@@ -259,8 +290,10 @@ class RuntimeServices:
                 self._state = StateSnapshot(self.clock().timestamp(), dimensions)
                 self._save_state()
                 narrative = result.get("narrative")
-                if narrative:
-                    self._l1.append(L1Record(self.clock(), str(narrative), "reflection", "self", []))
+                source_ids = result.get("source_l0_ids", [])
+                if narrative and source_ids:
+                    self._l1.append(L1Record(self.clock(), str(narrative), "reflection", "self",
+                                             [str(item) for item in source_ids]))
                 bias = result.get("retrieval_bias")
                 if isinstance(bias, dict):
                     self.retrieval_bias = {str(key): float(value) for key, value in bias.items()}

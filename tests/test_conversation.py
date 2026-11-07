@@ -60,12 +60,16 @@ class ConversationTests(unittest.TestCase):
                                    provider=provider, clock=lambda: self.now)
 
     def test_send_persists_history_l0_and_expression_feedback(self):
-        turn = self.service.send("你好")
+        self.service._l0.append("用户偏爱茉莉花茶", "conversation")
+        self.service._l0.append("今天稍微有些疲惫", "conversation")
+        turn = self.service.send("你还记得我喜欢什么茶吗？")
         self.assertEqual(turn.text, "收到")
+        self.assertEqual(self.provider.requests[0].recent_memories, ("用户偏爱茉莉花茶",))
         history = self.service.history()
         self.assertEqual([item["role"] for item in history], ["user", "assistant"])
         l0 = (self.one.workspace / "memory" / "l0.jsonl").read_text(encoding="utf-8").splitlines()
-        self.assertEqual(len(l0), 2)
+        self.assertEqual(len(l0), 4)
+        self.assertEqual([json.loads(line)["text"] for line in l0[-2:]], ["你还记得我喜欢什么茶吗？", "收到"])
         state = json.loads((self.one.workspace / "state.json").read_text(encoding="utf-8"))
         self.assertEqual(state["dimensions"]["emotional_residue"], "warm")
         self.assertAlmostEqual(state["dimensions"]["social_battery"], 0.75)
@@ -149,6 +153,19 @@ class ProviderTests(unittest.TestCase):
 
 
 class DesktopBridgeTests(unittest.TestCase):
+    def test_desktop_binds_concrete_local_decision_and_expression_providers(self):
+        runtime = DesktopRuntime(Path(tempfile.mkdtemp()))
+        self.assertIsNotNone(runtime.runtime)
+        self.assertEqual(type(runtime.runtime.decision_provider).__name__, "method")
+        decision = runtime.runtime.decision_provider({"state": {"social_battery": 0.8,
+                                                                      "expression_impulse": 0.5}})
+        expression = runtime.runtime.expression_provider(decision, {"context": None})
+        self.assertTrue(decision.speak)
+        self.assertEqual(expression.text, "我在听。")
+        self.assertIsNotNone(runtime.runtime.sleep_provider)
+        self.assertIsNotNone(runtime.runtime.reflection_provider)
+        runtime.handle({"action": "shutdown"})
+
     def test_bootstrap_create_switch_and_chat_are_role_scoped(self):
         runtime = DesktopRuntime(Path(tempfile.mkdtemp()))
         first = runtime.handle({"action": "bootstrap"})

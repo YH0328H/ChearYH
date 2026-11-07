@@ -23,8 +23,8 @@ class L0Archive:
     def path(self) -> Path:
         return self._path
 
-    def append(self, text: str, source: str, weight: str = "normal") -> str:
-        """Append one raw record and return its id. `weight` is "normal" or "low"."""
+    def append(self, text: str, source: str, weight: str = "normal", *, metadata: dict | None = None) -> str:
+        """Append one raw record; optional tier metadata preserves append-only raw facts."""
         if weight not in ("normal", "low"):
             raise ValueError(f"unknown weight {weight!r}")
         record = {
@@ -34,6 +34,8 @@ class L0Archive:
             "weight": weight,
             "text": text,
         }
+        if metadata:
+            record["tier_metadata"] = dict(metadata)
         line = json.dumps(record, ensure_ascii=False) + "\n"
         with self._path.open("a", encoding="utf-8", newline="\n") as fh:
             fh.write(line)

@@ -91,6 +91,16 @@ fn switch_role(role_id: String, state: State<'_, BridgeState>) -> Result<serde_j
     state.0.lock().map_err(|e| e.to_string())?.request("switch_role", serde_json::json!({"role_id": role_id}))
 }
 
+#[tauri::command]
+fn ui_action(action: String, payload: Option<serde_json::Value>, state: State<'_, BridgeState>) -> Result<serde_json::Value, String> {
+    state.0.lock().map_err(|e| e.to_string())?.request("ui_action", serde_json::json!({"ui_action": action, "payload": payload.unwrap_or_else(|| serde_json::json!({}))}))
+}
+
+#[tauri::command]
+fn memory_timeline(cursor: Option<String>, limit: Option<u32>, state: State<'_, BridgeState>) -> Result<serde_json::Value, String> {
+    state.0.lock().map_err(|e| e.to_string())?.request("memory_timeline", serde_json::json!({"cursor": cursor, "limit": limit.unwrap_or(100)}))
+}
+
 fn python_path() -> String {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().join("src");
     if let Some(existing) = std::env::var_os("PYTHONPATH") {
@@ -114,7 +124,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![app_bootstrap, send_message, create_role, switch_role])
+        .invoke_handler(tauri::generate_handler![app_bootstrap, send_message, create_role, switch_role, ui_action, memory_timeline])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
 }

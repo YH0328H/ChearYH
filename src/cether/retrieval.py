@@ -100,6 +100,44 @@ def load_embedding_config(path: Path, environ: Mapping[str, str]) -> EmbeddingCo
     )
 
 
+def embed_texts(cfg: EmbeddingConfig, texts: list[str], post: Post) -> list[list[float]]:
+    """Fetch a batch of vectors from an OpenAI-compatible endpoint.
+
+    Args:
+        cfg: Endpoint, model, credential and expected dimension settings.
+        texts: Input strings in response order.
+        post: Injectable JSON transport for deterministic testing.
+    Returns:
+        One validated vector per input string.
+    Theory:
+        Batching amortizes network setup while preserving the provider's semantic space.
+    """
+    if not cfg.api_key:
+        raise EmbeddingError("API key is not set")
+    if not texts:
+        return []
+    body = {"model": cfg.model_id, "input": texts}
+    headers = {"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json"}
+    url = cfg.base_url.rstrip("/") + "/embeddings"
+    try:
+        reply = post(url, body, headers)
+    except Exception as exc:
+        raise EmbeddingError(f"failed to call embedding slot: {exc}") from exc
+    try:
+        rows = sorted(reply["data"], key=lambda item: int(item.get("index", 0)))
+        vectors = [item["embedding"] for item in rows]
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise EmbeddingError(f"unexpected response shape: {json.dumps(reply, ensure_ascii=False)[:200]}") from exc
+    if len(vectors) != len(texts):
+        raise EmbeddingError(f"expected {len(texts)} vectors, got {len(vectors)}")
+    for vector in vectors:
+        if not isinstance(vector, list) or len(vector) != cfg.dimensions:
+            raise EmbeddingError(f"expected {cfg.dimensions} dimensions, got {len(vector) if isinstance(vector, list) else 'invalid'}")
+        if any(not isinstance(value, (int, float)) for value in vector):
+            raise EmbeddingError("embedding vector contains a non-numeric value")
+    return [[float(value) for value in vector] for vector in vectors]
+
+
 def embed_text(cfg: EmbeddingConfig, text: str, post: Post) -> list[float]:
     """Return the embedding vector for one text."""
     if not cfg.api_key:
@@ -116,8 +154,10 @@ def embed_text(cfg: EmbeddingConfig, text: str, post: Post) -> list[float]:
     except (KeyError, IndexError, TypeError) as exc:
         raise EmbeddingError(f"unexpected response shape: {json.dumps(reply, ensure_ascii=False)[:200]}") from exc
     if not isinstance(vector, list) or len(vector) != cfg.dimensions:
-        raise EmbeddingError(f"expected {cfg.dimensions} dimensions, got {len(vector)}")
-    return vector
+        raise EmbeddingError(f"expected {cfg.dimensions} dimensions, got {len(vector) if isinstance(vector, list) else 'invalid'}")
+    if any(not isinstance(value, (int, float)) for value in vector):
+        raise EmbeddingError("embedding vector contains a non-numeric value")
+    return [float(value) for value in vector]
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:

@@ -2,19 +2,22 @@
 
 本文档归类整理推荐的算法实现方案，与三份任务书的统一理解对应。算法分为必须实现、推荐实现、可选实现三档。
 
-> 进度边界（2026-11-06）：清单中的算法模块已实现；这不代表认知模型/provider 或桌面产品链路已接通。当前主运行时空间索引为 `src/cether/spatial_index.py`，角色注册表为 `src/cether/roles.py`；工作区未跟踪的平行实现需单独确认归属，不作为本清单的集成实现。
+> 进度边界（2026-11-07）：`src/cether/memory_retrieval.py` 已把角色隔离 L0 检索接入显式对话轮次：中权重走 BM25，并可注入 embedding、图扩散 provider 做加权 RRF；生命周期、反刍、驱力/效价/区域、抖动与六位编码惩罚进入融合评分；高权重仅由独立 spatial provider 返回，低权重不主动注入。当前 L0 API 只产生 `normal/low`，所以高权重需要上游分类与空间索引写入接通后才会有运行数据；默认没有 embedding/图/spatial provider 时不会伪造这些通道。当前主运行时空间索引为 `src/cether/spatial_index.py`，角色注册表为 `src/cether/roles.py`；工作区未跟踪的平行实现需单独确认归属，不作为本清单的集成实现。同步热路径 P99 基准脚本 `benchmarks/retrieval_baseline.py` 目前使用合成 L0 数据，并非 TASK.md 指定随项目提供的验收语料。
 
 ## 一、检索与融合算法（记忆召回）
 
 **目标**：300ms 内精准召回相关记忆。
 
-### 必须实现（已完成）
+### 算法原语已完成；运行时集成进行中
 | 算法 | 状态 | 作用 | 实现位置 |
 |------|------|------|----------|
-| BM25 词法检索 | ✅ | 精确关键词匹配，倒排索引 | `retrieval.py::BM25` |
-| Embedding 向量检索 | ✅ | 语义泛化匹配，cosine similarity | `retrieval.py::VectorRetrieval` |
-| RRF 倒数排名融合 | ✅ | 无监督融合 BM25+向量排名 | `retrieval.py::rrf_fusion` |
-| 图扩散简化版 | ✅ | 一跳邻居+共现权重关联联想 | `retrieval.py::GraphRetrieval` |
+| BM25 词法检索 | ✅ 接入 | 精确关键词匹配，角色 scope 内检索 | `retrieval.py::BM25`、`memory_retrieval.py::L0RetrievalService` |
+| Embedding 向量检索 | ⚠️ 可注入 | cosine 通道；embedding provider 未配置时关闭 | `retrieval.py::VectorRetrieval`、`memory_retrieval.py` |
+| 加权 RRF 融合 | ✅ 接入 | 按通道权重融合 BM25/向量/图排名 | `memory_retrieval.py::weighted_rrf_fusion` |
+| 图扩散简化版 | ✅ 本地接通 | `LocalCooccurrenceGraphProvider` 从角色 normal L0 构建确定性共现图，再按查询 seed 做跳数扩散 | `graph_retrieval.py`、`retrieval.py::GraphRetrieval`、`memory_retrieval.py` |
+| 高权重空间召回 | ✅ 本地接通 | `memory_tiering.py` 依据手动标记、情绪、显著性和关系事件分类；`SpatialMemoryProvider` 按查询词激活并沿固定路线返回 | `memory_tiering.py`、`spatial_retrieval.py`、`memory_retrieval.py::L0RetrievalService` |
+| 多路乘子与六位惩罚 | ✅ 接入 | lifecycle、rumination、drive、valence、region、jitter、hexbit | `multipliers.py`、`hexbit.py`、`memory_retrieval.py` |
+| 同步热路径基准 | ⚠️ 初版 | 1000–3000 合成 L0 条目，报告 P50/P95/P99；不替代验收 corpus | `benchmarks/retrieval_baseline.py` |
 
 ### 推荐实现
 | 算法 | 状态 | 作用 | 实现位置 |
@@ -24,7 +27,8 @@
 
 **说明**：
 - 六十四卦：6维均为显式语义规则（非随机哈希），编码恒定可复算；维度选取基于项目既有状态/记忆字段（valence、salience、emotion、relation_event、self_initiated、flash_weight），`tests/test_hexbit.py`（13条用例）验证编码正确性与递减惩罚边界，2026-11-05 完成。
-- 复合乘子：各项乘子独立计算，检索时依次相乘
+- 复合乘子：各项乘子独立计算，检索时依次相乘。`memory_retrieval.py` 的 drive/valence/region 只读取记录中实际存在的字段与注入状态；缺字段使用中性默认值。
+- 基准结果（2026-11-07，合成热库 2000 条、100 查询，索引缓存开启）：P50 7.075ms / P95 9.077ms / P99 10.613ms / max 11.522ms，0/100 超过 300ms。缓存按 L0 mtime/size 失效，归档追加会重建索引。该数据仅衡量本地 BM25 热路径，语义 provider 关闭，不能据此视为 TASK.md 11.11/验收 25/38 的最终基准通过。
 
 ## 二、记忆生命周期算法（存储与遗忘）
 
@@ -138,10 +142,15 @@
 
 ## 当前进度与下一步
 
-**已完成算法**：第一批全部5项 + 第二批全部4项 + 第三批全部5项 + 第四批全部1项，一至五类算法清单**全部完成**。全量测试 245 passed，无回归。
+**算法原语状态**：第一批5项、第二批4项、第三批5项、第四批1项均有实现；检索原语包括 BM25、向量/图适配器、加权 RRF 和乘子。算法测试数以当前 pytest 结果为准，不沿用历史快照 245。
 
-**建议下一步**：
-1. 算法清单已清空，转向 TASK.md 第九章「角色卡与多角色」（scope 硬绑定、切换回滚、崩溃恢复）与第十章「交互可视化」——这两章当前在 `src/cether` 下尚无对应模块，是前端 Tauri 壳对接前必须补的接口契约
-2. 或推进 `runner.py` 整体运行时主循环串联，把已完成的各模块接成完整闭环
+**运行时接通状态（2026-11-07）**：
+- 对话 L0 BM25 检索已接入角色 scope、TOML 参数热加载和延迟观测；向量/图通道为可注入接口，未配置 provider 时明确关闭。
+- 本地决策/表达 provider 已接入 desktop 默认 RuntimeServices；表达生成仍由独立对话 provider 负责。
+- 浅睡可对近期 L0 产生去重候选 ID 并调用角色本地索引回调，不改写 append-only L0。
+- 深睡反思与梦境产物带 source L0 IDs；反思按配置阈值从文本证据抽取摘要并校准状态基线，检索偏置在索引刷新 stage 更新。
+- 同步检索基准目前仅为合成 L0/BM25 基线；缺少项目验收 corpus，语义 provider 关闭，不能视为最终 P99 验收。
 
-所有算法都归档到本文档，不会遗忘。实现时从本文档查表，按批次推进。
+**阶段 2桌面整合状态（2026-11-07）**：Python desktop bridge 已暴露状态快照、记忆时间轴、上下文动作、角色切换进度与 wake injection；Tauri 已转发 `ui_action`/`memory_timeline`，透明陪伴壳已接入聊天、角色管理、状态和记忆面板。`tests/test_desktop_ui.py` 覆盖核心动作反馈与角色本地数据边界。
+
+**未完成**：正式项目验收 corpus 的规模化性能测量，以及 TASK.md 全量端到端验收；星图可视化、冷库完整交互、后台事件流和配置写入面板仍是桌面后续迭代项。阶段1关键运行时闭环（检索融合、决策表达、睡眠调度/打断、巩固反思）已接通并通过回归。

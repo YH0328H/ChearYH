@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import Callable
 
 from .l0 import L0Archive
+from .memory_retrieval import L0RetrievalService, RetrievalConfigWatcher
 from .providers import ConversationProvider, LocalRuleProvider, TurnRequest
 from .roles import RoleContext, RoleRegistry
 from .runtime_services import RuntimeServices
+from .retrieval import RetrievalResult
 from .state import StateSnapshot
 
 
@@ -35,6 +37,8 @@ class ConversationService:
         registry: RoleRegistry,
         runtime: RuntimeServices,
         provider: ConversationProvider | None = None,
+        retrieval: L0RetrievalService | None = None,
+        retrieval_config: RetrievalConfigWatcher | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self.role = role
@@ -45,6 +49,13 @@ class ConversationService:
         self._lock = threading.Lock()
         self._history_path = role.workspace / "conversation.jsonl"
         self._l0 = L0Archive(role.workspace / "memory" / "l0.jsonl")
+        self.retrieval = retrieval or L0RetrievalService(
+            role, registry, self._l0,
+            retrieval_config or RetrievalConfigWatcher(Path(__file__).resolve().parents[2] / "config" / "retrieval.toml"),
+            spatial_provider=getattr(runtime, "spatial_provider", None),
+            embedding_provider=getattr(runtime, "embedding_provider", None),
+            graph_provider=getattr(runtime, "graph_provider", None),
+        )
 
     def send(self, text: str) -> ConversationTurn:
         """Generate one response, persist both sides, and feed expression state."""
@@ -57,7 +68,7 @@ class ConversationService:
             self.registry.ensure_role_scope(self.role.scope_id)
             state = self.runtime._read_state()
             wake = self.runtime.pending_wake_context()
-            memories = tuple(record["text"] for record in list(self._l0)[-8:])
+            memories = self.retrieval.search(user_text)
             request = TurnRequest(
                 role_name=self.role.config.name,
                 persona=self._persona(),
