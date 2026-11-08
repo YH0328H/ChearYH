@@ -244,17 +244,16 @@ expression_duration = 0.8     # 微表情持续时间(秒)
 
 ### 3.3 主动关怀调度器
 
-**核心思想**: 周期性观察(每 5 分钟),多触发器,gate 检查,主动发起对话。
+**核心思想**: 周期性观察,多触发器,gate 检查,主动发起对话。
 
 #### 3.3.1 五种触发器
 
 | 触发器 | 检测条件 | 典型行为 | 冷却时间 |
 |--------|----------|----------|----------|
 | IdleTrigger | 30 分钟无互动 | "好久没见到你了" | 3600s |
-| StressTrigger | 屏幕: bug/error/deadline | "看起来遇到困难了" | 7200s |
-| CalendarTrigger | 日程提醒时间到 | "记得 15 分钟后有会议" | 无 |
-| MindBoxTrigger | 心事匣 14 天回顾 | "之前提到的[心事]" | 86400s |
-| WeatherTrigger | 极端天气 | "今天下雨了,记得带伞" | 43200s |
+| StressTrigger | 屏幕: bug/error | "看起来遇到困难了" | 冷却期 |
+| MindBoxTrigger | 心事匣定期回顾 | "之前提到的[心事]" | 冷却期 |
+| WeatherTrigger | 极端天气 | "今天下雨了,记得带伞" | 冷却期 |
 
 #### 3.3.2 gate 检查机制
 
@@ -264,7 +263,7 @@ expression_duration = 0.8     # 微表情持续时间(秒)
 | sleep | 角色是否清醒 | 延后到下次检查 |
 | mode | 当前模式是否允许主动 | 跳过此候选 |
 | cooldown | 距上次主动是否超过冷却 | 延后到冷却结束 |
-| daily_cap | 今日次数是否未达上限 | 延后到明天 |
+| frequency_limit | 频率是否在合理范围 | 延后稍后 |
 
 #### 3.3.3 调度循环
 ```python
@@ -302,11 +301,11 @@ threshold = 1800              # 离开检测(秒)
 cooldown = 3600               # 冷却时间(秒)
 
 [triggers.stress]
-keywords = ["bug", "error", "deadline", "崩溃", "报错"]
+keywords = ["bug", "error", "崩溃", "报错"]
 cooldown = 7200
 
 [triggers.mind_box]
-lookback_days = 14            # 回顾窗口(天)
+lookback_days = 14            # 回顾窗口(灵活调整)
 min_importance = 0.65         # 最低重要度
 cooldown = 86400
 ```
@@ -517,69 +516,69 @@ class ContextOrchestrator:
 
 ### 6.2 V3.0 新增模块(必须从一开始按原则实现)
 
-- [ ] ContextOrchestrator 实现(3 天)
+- [ ] ContextOrchestrator 实现
   - `src/cether/context_orchestrator.py`
   - `config/context_orchestrator.toml`
   - 单元测试 `tests/test_context_orchestrator.py`
 
-- [ ] backchannel 快速接话(2 天)
+- [ ] backchannel 快速接话
   - `src/cether/backchannel.py`
   - `config/backchannel.toml`
   - 前端集成 `dist/index.html`
   - 延迟测试 `tests/test_backchannel.py`
 
-- [ ] 主动关怀调度器(1 天)
+- [ ] 主动关怀调度器
   - `src/cether/active_care.py`
   - 5 个触发器 `src/cether/triggers/`
   - gate 检查机制
   - 调度循环与决策日志
 
-- [ ] 决策透明化(1 天)
+- [ ] 决策透明化
   - 决策日志 JSONL 写入
   - UI 展示 `dist/index.html`
   - 日志查询 API
 
-- [ ] 记忆检索升级(0.5 天)
+- [ ] 记忆检索升级
   - BM25 + Embedding + PPR + MMR 混合检索
   - `config/memory.toml` 参数配置
   - 准确率测试 `tests/test_retrieval.py`
 
-- [ ] 屏幕感知(1 天)
+- [ ] 屏幕感知
   - `src/cether/screen_sense.py`
   - 哈希检测优化
   - `config/screen_sense.toml`
 
-- [ ] 语音交互(1.5 天)
+- [ ] 语音交互
   - ASR: Whisper.cpp 集成
   - TTS: Edge TTS / VITS
   - `config/voice.toml`
 
-- [ ] 天气现实锚点(1 天)
+- [ ] 天气现实锚点
   - Open-Meteo API 集成
   - 天气影响情绪
   - `config/weather.toml`
 
 ### 6.3 优先级排序
 
-**Week 1 — P0 核心架构**:
-1. ContextOrchestrator (Day 1-3)
-2. backchannel (Day 4-5)
-3. 决策透明化 (Day 6)
-4. 记忆检索升级 (Day 6)
-5. 会话管理后端 (Day 7)
+**P0 核心架构**:
+1. ContextOrchestrator
+2. backchannel
+3. 决策透明化
+4. 记忆检索升级
+5. 会话管理后端
 
-**Week 2 — P1 体验提升**:
-1. 屏幕感知 (Day 8)
-2. 语音交互 (Day 9-10)
-3. 主动关怀调度 (Day 11)
-4. 桌宠模式 (Day 11)
-5. 天气现实锚点 (Day 12)
+**P1 体验提升**:
+1. 屏幕感知
+2. 语音交互
+3. 主动关怀调度
+4. 桌宠模式
+5. 天气现实锚点
 
-**Week 3 — P2 锦上添花**:
-1. Live2D 立绘 (Day 13)
-2. Ollama 本地模型 (Day 14-15)
-3. 全量测试 (Day 16-17)
-4. 文档更新 (Day 18)
+**P2 锦上添花**:
+1. Live2D 立绘
+2. Ollama 本地模型
+3. 全量测试
+4. 文档更新
 
 ---
 

@@ -86,8 +86,8 @@ def process_chunk(self, text_chunk):
 
 | 算法 | 状态 | 作用 | 实现位置 |
 |------|------|------|----------|
-| **PPR 图扩散** | 📋 待实现 | Personalized PageRank 从 top 30 候选出发 2-hop | V3.0 Week 1 |
-| **MMR 去重** | 📋 待实现 | Maximal Marginal Relevance 平衡相关性和多样性 | V3.0 Week 1 |
+| **PPR 图扩散** | 📋 待实现 | Personalized PageRank 从 top 30 候选出发 2-hop | V3.0 |
+| **MMR 去重** | 📋 待实现 | Maximal Marginal Relevance 平衡相关性和多样性 | V3.0 |
 
 ### 1.1 BM25 词法检索
 
@@ -399,8 +399,8 @@ P(action_i) = |amplitude_i|² / Σ|amplitude_j|²
 | 算法 | 状态 | 作用 | 实现位置 |
 |------|------|------|----------|
 | **PAD 三维模型** | 📋 待实现 | Pleasure/Arousal/Dominance 连续空间 | `cognition.py`(V3.0 扩展) |
-| **PAD → 7 种情绪映射** | 📋 待实现 | PAD 区间→ joy/sadness/anger/fear/surprise/disgust/neutral | V3.0 Week 1 |
-| **情绪衰减** | 📋 待实现 | 向基准值回归 | V3.0 Week 1 |
+| **PAD → 7 种情绪映射** | 📋 待实现 | PAD 区间→ joy/sadness/anger/fear/surprise/disgust/neutral | V3.0 |
+| **情绪衰减** | 📋 待实现 | 向基准值回归 | V3.0 |
 
 ### 4.1 PAD 三维模型
 
@@ -604,17 +604,17 @@ next_interval = base_interval × frustration_factor^frustrated_count
 ### 第四批(可选增强,4小时+)✅ 已完成(2026-11-05)
 15. 空间索引巡游(4小时)
 
-### 第五批(V3.0 核心算法,3周)📋 待实现
-16. **ContextOrchestrator**(3天) — 四级优先级裁决 + 动态预算分配
-17. **backchannel 前端集成**(2天) — 实时微表情 + TTS 取消
-18. **PAD 情绪模型**(1天) — 三维连续空间 + 7 种离散情绪
-19. **PPR 图扩散**(0.5天) — Personalized PageRank 2-hop
-20. **MMR 去重**(0.5天) — Maximal Marginal Relevance
-21. **主动关怀调度器**(1天) — 5 种触发器 + gate 检查
-22. **决策日志**(1天) — 完整记录所有主动行为
-23. **屏幕感知**(1天) — 截图 + 哈希检测 + Vision API
-24. **语音交互**(1.5天) — ASR Whisper.cpp + TTS Edge/VITS
-25. **天气感知**(1天) — Open-Meteo API + 情绪影响
+### 第五批(V3.0 核心算法)📋 待实现
+16. **ContextOrchestrator** — 四级优先级裁决 + 动态预算分配
+17. **backchannel 前端集成** — 实时微表情 + TTS 取消
+18. **PAD 情绪模型** — 三维连续空间 + 7 种离散情绪
+19. **PPR 图扩散** — Personalized PageRank 2-hop
+20. **MMR 去重** — Maximal Marginal Relevance
+21. **主动关怀调度器** — 5 种触发器 + gate 检查
+22. **决策日志** — 完整记录所有主动行为
+23. **屏幕感知** — 截图 + 哈希检测 + Vision API
+24. **语音交互** — ASR Whisper.cpp + TTS Edge/VITS
+25. **天气感知** — Open-Meteo API + 情绪影响
 
 ---
 
@@ -627,13 +627,13 @@ next_interval = base_interval × frustration_factor^frustrated_count
 - ✅ 反刍抑制/Jaccard 合并/玻恩规则抽样
 - ✅ 同步热路径基准 P99<300ms
 
-### V3.0 待实现算法(3周计划)
-- 📋 ContextOrchestrator(Week 1)
-- 📋 PAD 情绪模型(Week 1)
-- 📋 PPR + MMR(Week 1)
-- 📋 主动关怀调度器(Week 2)
-- 📋 决策日志(Week 2)
-- 📋 屏幕感知/语音交互/天气(Week 2)
+### V3.0 待实现算法
+- 📋 ContextOrchestrator
+- 📋 PAD 情绪模型
+- 📋 PPR + MMR
+- 📋 主动关怀调度器
+- 📋 决策日志
+- 📋 屏幕感知/语音交互/天气
 
 ### 测试覆盖
 最新完整回归(2026-11-08): **390 passed in 28.90s**
