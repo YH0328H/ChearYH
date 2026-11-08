@@ -1,0 +1,20 @@
+[sleep]
+# Per-role records considered by one deterministic consolidation pass.
+max_records = 2000
+# Exact-token Jaccard threshold used to report near-duplicate candidates.
+duplicate_similarity = 0.8
+# Minimum L0 count before deep reflection writes an L1 narrative.
+reflect_min_records = 3
+# Maximum baseline movement toward observed lexical evidence per deep-sleep pass.
+baseline_alpha = 0.1
+# Stable default retrieval-bias factors; no generated embedding/index is implied.
+retrieval_bias_default = 1.0
+
+[sleep_schedule]
+# Disabled by default until the host enables idle-aware sleep windows.
+enabled = false
+light_start = "22:00"
+light_end = "23:00"
+deep_start = "23:00"
+deep_end = "07:00"
+idle_seconds = 900.0

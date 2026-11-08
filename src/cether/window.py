@@ -94,14 +94,32 @@ def checkpoint_block_reason(
     silent_mode: bool,
     hourly_fires: list[datetime],
     hourly_cap: int,
+    *,
+    momentary_valence: float = 0.0,
+    relation_tension: float = 0.0,
+    arousal_threshold: float = 0.7,
+    valence_threshold: float = 0.25,
 ) -> str | None:
     """Return why a checkpoint may not run now, or None if it may run."""
     if sleeping:
         return "sleeping"
     if silent_mode:
         return "silent_mode"
-    if active_mode(now, windows) is None:
-        return "outside_window"
+    mode = active_mode(now, windows)
+    penetrated = False
+    if mode is None:
+        from .state import penetration_eligible
+
+        penetrate_enabled = any(window.penetrate for window in windows)
+        penetrated = penetration_eligible(
+            enabled=penetrate_enabled,
+            momentary_valence=momentary_valence,
+            relation_tension=relation_tension,
+            arousal_threshold=arousal_threshold,
+            valence_threshold=valence_threshold,
+        )
+        if not penetrated:
+            return "outside_window"
     recent = [t for t in hourly_fires if now - t < timedelta(hours=1)]
     if len(recent) >= hourly_cap:
         return "hourly_cap"

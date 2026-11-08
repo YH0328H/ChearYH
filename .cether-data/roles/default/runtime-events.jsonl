@@ -1,0 +1,4 @@
+{"ts": "2026-11-08T07:28:18.469233+00:00", "tags": ["self_world"], "kind": "pipeline_perception_completed", "description": "", "metadata": {"tick_id": 1, "role_scope": "3ea4e8cdc1b7436d8bc48fdcee6e06d3"}}
+{"ts": "2026-11-08T07:28:18.471239+00:00", "tags": ["self_world"], "kind": "pipeline_l0_completed", "description": "", "metadata": {"tick_id": 1, "role_scope": "3ea4e8cdc1b7436d8bc48fdcee6e06d3"}}
+{"ts": "2026-11-08T07:28:18.476244+00:00", "tags": ["self_world"], "kind": "pipeline_state_completed", "description": "", "metadata": {"tick_id": 1, "role_scope": "3ea4e8cdc1b7436d8bc48fdcee6e06d3"}}
+{"ts": "2026-11-08T07:28:18.476244+00:00", "tags": ["self_world"], "kind": "pipeline_runtime_skipped", "description": "observation unchanged; state updated", "metadata": {"tick_id": 1, "role_scope": "3ea4e8cdc1b7436d8bc48fdcee6e06d3"}}

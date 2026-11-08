@@ -60,6 +60,7 @@ class RuntimeServices:
         graph_provider: Callable[[list[dict]], Any] | None = None,
         sleep_mode: Callable[[RoleContext, datetime], str] | None = None,
         gate_reason: Callable[[RoleContext, Any], str | None] | None = None,
+        mode_provider: Callable[[], str] | None = None,
     ) -> None:
         if (narrative_config is None) != (narrative_post is None):
             raise ValueError("narrative_config and narrative_post must be supplied together")
@@ -82,6 +83,7 @@ class RuntimeServices:
         self.graph_provider = graph_provider
         self.sleep_mode_provider = sleep_mode
         self.gate_reason_provider = gate_reason
+        self.mode_provider = mode_provider
         self._sleep_mode = "awake"
         self._sleep_active = False
         self._sleep_interrupted = False
@@ -98,6 +100,15 @@ class RuntimeServices:
             self._unregister_canceller = registry.register_task_canceller(role.config.role_id, self.cancel)
         self._l0 = L0Archive(role.workspace / "memory" / "l0.jsonl")
         self._l1 = L1Archive(role.workspace / "memory" / "l1.jsonl")
+
+    def get_current_mode(self) -> str:
+        """Return current mode from mode provider or default to companion."""
+        if self.mode_provider:
+            try:
+                return self.mode_provider()
+            except Exception:
+                pass
+        return "companion"
         self._recent_themes: list[tuple[datetime, str]] = []
         self.retrieval_bias: dict[str, float] = self._load_retrieval_bias()
 

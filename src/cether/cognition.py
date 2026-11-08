@@ -22,6 +22,9 @@ class Expression:
     kind: str
     emotion: str
     follow_up: bool = False
+    tone: str | None = None
+    expression: str | None = None
+    action: str | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,24 @@ class LocalDecisionProvider:
         if impulse <= self.config.low_impulse_threshold:
             return Decision(False, "low_expression_impulse", self.config.default_priority, "listen")
         return Decision(True, "foreground_turn", self.config.default_priority)
+
+
+def resolve_expression(response: Mapping[str, Any]) -> Expression:
+    """Use structured provider directives before deterministic text inference."""
+    directive = response.get("directive")
+    if isinstance(directive, Mapping):
+        emotion = str(directive.get("tone") or response.get("emotion") or "neutral")
+        return Expression(
+            text=str(response.get("text", "")),
+            kind=str(response.get("kind", "full")),
+            emotion=emotion,
+            expression=str(directive.get("expression")) if directive.get("expression") is not None else None,
+            action=str(directive.get("action")) if directive.get("action") is not None else None,
+            tone=str(directive.get("tone")) if directive.get("tone") is not None else None,
+        )
+    text = str(response.get("text", ""))
+    inferred = "concerned" if any(word in text for word in ("担心", "难过", "抱歉")) else str(response.get("emotion", "neutral"))
+    return Expression(text, str(response.get("kind", "full")), inferred)
 
 
 class LocalExpressionProvider:

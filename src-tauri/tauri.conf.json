@@ -9,17 +9,20 @@
     "beforeBuildCommand": ""
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Cether",
-        "width": 320,
-        "height": 480,
-        "resizable": false,
+        "width": 1080,
+        "height": 760,
+        "minWidth": 720,
+        "minHeight": 560,
+        "resizable": true,
         "fullscreen": false,
         "decorations": false,
         "transparent": true,
-        "alwaysOnTop": true,
-        "skipTaskbar": true
+        "alwaysOnTop": false,
+        "skipTaskbar": false
       }
     ],
     "security": {
@@ -29,6 +32,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "../config/": "config/",
+      "../presets/": "presets/"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,6 +45,24 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://releases.cether.app/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "dialog": true,
+      "pubkey": "REPLACE_WITH_PUBLIC_KEY_AFTER_GENERATION",
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

@@ -154,6 +154,52 @@ def translate_to_texture(dimension: str, value: float) -> str:
 
 
 @dataclass(frozen=True)
+class AffectProjection:
+    """Ephemeral valence/arousal projection for one event and relation context.
+
+    Values are derived on demand; they are not persisted as independent state dimensions.
+    """
+
+    valence: float
+    arousal: float
+
+
+def project_affect(momentary_valence: float, relation_tension: float) -> AffectProjection:
+    """Project event valence and relation tension into bounded affect semantics.
+
+    Valence preserves the current emotion's positive/negative direction. Arousal
+    combines emotional magnitude with relationship tension, so either an intense
+    emotion or a tense interaction can activate the moment without changing its
+    direction. Inputs are clamped to the documented ranges.
+    """
+    if not -1.0 <= momentary_valence <= 1.0:
+        raise ValueError("momentary_valence must be between -1.0 and 1.0")
+    if not 0.0 <= relation_tension <= 1.0:
+        raise ValueError("relation_tension must be between 0.0 and 1.0")
+    return AffectProjection(
+        valence=momentary_valence,
+        arousal=abs(momentary_valence) * 0.7 + relation_tension * 0.3,
+    )
+
+
+def penetration_eligible(
+    *,
+    enabled: bool,
+    momentary_valence: float,
+    relation_tension: float,
+    arousal_threshold: float = 0.7,
+    valence_threshold: float = 0.25,
+) -> bool:
+    """Require configured penetration, strong arousal, and a clear valence direction."""
+    if not 0.0 <= arousal_threshold <= 1.0:
+        raise ValueError("arousal_threshold must be between 0.0 and 1.0")
+    if not 0.0 <= valence_threshold <= 1.0:
+        raise ValueError("valence_threshold must be between 0.0 and 1.0")
+    affect = project_affect(momentary_valence, relation_tension)
+    return enabled and affect.arousal >= arousal_threshold and abs(affect.valence) >= valence_threshold
+
+
+@dataclass(frozen=True)
 class TensionStateConfig:
     """张力态区间判定阈值（TASK.md 60/227：张力态自然涌现）。
 

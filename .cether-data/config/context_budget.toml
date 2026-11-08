@@ -1,0 +1,12 @@
+# 单轮对话通道注入预算（TASK.md 新增 7.8：上下文预算优先级裁决）。
+# 单位：字符数。各段预算互不借用；高优先级段永远不会被低优先级段挤占。
+# 优先级从高到低：人格锚点 > 硬边界 > 当前状态质地 > 关系摘要 > 心事匣 > 召回记忆 > 会话续接摘要
+
+[context_budget]
+persona_anchor = 400        # 人格锚点
+hard_boundary = 200         # 硬边界
+state_texture = 150         # 当前状态质地
+relation_summary = 300      # 关系摘要
+mind_box = 250              # 心事匣
+recall_memory = 600         # 召回记忆
+session_continuation = 200  # 会话续接摘要

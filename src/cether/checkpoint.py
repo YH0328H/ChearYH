@@ -26,7 +26,7 @@ class MindBox:
     items: list[dict] = field(default_factory=list)
 
     def add(self, text: str, ts: datetime) -> None:
-        self.items.append({"ts": ts.isoformat(), "text": text, "weight": "low"})
+        self.items.append({"ts": ts.isoformat(), "text": text, "weight": "low", "kind": "reflection"})
 
     def pending_hesitation(self) -> list[dict]:
         return [i for i in self.items if i.get("kind") == "hesitation"]

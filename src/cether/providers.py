@@ -39,6 +39,18 @@ class TurnRequest:
     state: dict[str, float]
     recent_memories: tuple[str, ...]
     wake_context: str | None = None
+    self_awareness: str = "resident"
+
+
+@dataclass(frozen=True)
+class ExpressionDirective:
+    tone: str | None = None
+    expression: str | None = None
+    action: str | None = None
+
+    def __post_init__(self) -> None:
+        if any(value is not None and not value.strip() for value in (self.tone, self.expression, self.action)):
+            raise ValueError("expression directives must be non-empty when present")
 
 
 @dataclass(frozen=True)
@@ -46,6 +58,7 @@ class TurnResponse:
     text: str
     kind: str = "full"
     emotion: str = "neutral"
+    directive: ExpressionDirective | None = None
 
 
 class ConversationProvider(Protocol):
@@ -81,6 +94,7 @@ class OpenAICompatibleProvider:
         if not key:
             raise ProviderError(f"API key is not set in {self.config.key_env}")
         system = [request.persona.strip(), f"你正在以角色{request.role_name}和用户对话。当前状态：{json.dumps(request.state, ensure_ascii=False)}"]
+        system.append(f"角色卡自我认知档位：{request.self_awareness}。以该角色卡内容为准；不得替用户修改或推断该设定。")
         if request.recent_memories:
             system.append("近期记忆：\n" + "\n".join(f"- {item}" for item in request.recent_memories))
         if request.wake_context:
@@ -105,12 +119,22 @@ class OpenAICompatibleProvider:
         except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
             raise ProviderError(f"chat provider request failed: {exc}") from exc
         try:
-            content = payload["choices"][0]["message"]["content"]
+            message = payload["choices"][0]["message"]
+            content = message["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderError("chat provider returned an unexpected response shape") from exc
         if not isinstance(content, str) or not content.strip():
             raise ProviderError("chat provider returned an empty response")
-        return TurnResponse(content.strip())
+        raw = message.get("expression_directive")
+        directive = None
+        if raw is not None:
+            if not isinstance(raw, dict):
+                raise ProviderError("chat provider returned an invalid expression directive")
+            try:
+                directive = ExpressionDirective(**raw)
+            except (TypeError, ValueError) as exc:
+                raise ProviderError("chat provider returned an invalid expression directive") from exc
+        return TurnResponse(content.strip(), directive=directive)
 
 
 def load_provider_config(path: str | os.PathLike[str]) -> ProviderConfig:

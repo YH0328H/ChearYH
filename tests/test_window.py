@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from cether.state import penetration_eligible, project_affect  # noqa: E402
 from cether.window import (  # noqa: E402
     CheckpointConfig,
     Window,
@@ -91,6 +92,20 @@ class ActiveModeTests(unittest.TestCase):
         now = datetime(2026, 1, 1, 11, 30)
         self.assertEqual(active_mode(now, windows), "boost")
 
+    def test_overlapping_windows_are_union_for_checkpoint_access(self) -> None:
+        windows = [
+            Window("early", datetime(2026, 1, 1, 9, 0).time(), datetime(2026, 1, 1, 11, 0).time(), "allow", False),
+            Window("late", datetime(2026, 1, 1, 10, 30).time(), datetime(2026, 1, 1, 12, 0).time(), "allow", False),
+        ]
+        for hour, minute in ((9, 30), (10, 45), (11, 30)):
+            self.assertIsNone(checkpoint_block_reason(
+                datetime(2026, 1, 1, hour, minute), windows, False, False, [], 2
+            ))
+        self.assertEqual(
+            checkpoint_block_reason(datetime(2026, 1, 1, 12, 0), windows, False, False, [], 2),
+            "outside_window",
+        )
+
     def test_none_outside_any_window(self) -> None:
         windows = [Window("a", datetime(2026, 1, 1, 10, 0).time(), datetime(2026, 1, 1, 12, 0).time(), "allow", False)]
         now = datetime(2026, 1, 1, 13, 0)
@@ -101,6 +116,28 @@ class ActiveModeTests(unittest.TestCase):
         self.assertEqual(active_mode(datetime(2026, 1, 1, 23, 0), windows), "allow")
         self.assertEqual(active_mode(datetime(2026, 1, 1, 3, 0), windows), "allow")
         self.assertIsNone(active_mode(datetime(2026, 1, 1, 12, 0), windows))
+
+
+class PenetrationSemanticsTests(unittest.TestCase):
+    def test_projection_preserves_valence_direction_and_combines_arousal(self) -> None:
+        positive = project_affect(0.8, 0.5)
+        negative = project_affect(-0.8, 0.5)
+        self.assertAlmostEqual(positive.arousal, 0.71)
+        self.assertEqual(positive.valence, 0.8)
+        self.assertEqual(negative.valence, -0.8)
+        self.assertEqual(negative.arousal, positive.arousal)
+
+    def test_requires_enabled_high_arousal_and_clear_valence(self) -> None:
+        self.assertTrue(penetration_eligible(enabled=True, momentary_valence=-0.8, relation_tension=0.5))
+        self.assertFalse(penetration_eligible(enabled=False, momentary_valence=0.9, relation_tension=0.9))
+        self.assertFalse(penetration_eligible(enabled=True, momentary_valence=0.05, relation_tension=1.0))
+        self.assertFalse(penetration_eligible(enabled=True, momentary_valence=0.8, relation_tension=0.0))
+
+    def test_rejects_out_of_range_affect_inputs(self) -> None:
+        with self.assertRaisesRegex(ValueError, "momentary_valence"):
+            project_affect(1.1, 0.2)
+        with self.assertRaisesRegex(ValueError, "relation_tension"):
+            project_affect(0.5, -0.1)
 
 
 class CheckpointBlockReasonTests(unittest.TestCase):
@@ -140,6 +177,18 @@ class CheckpointBlockReasonTests(unittest.TestCase):
         reason = checkpoint_block_reason(self.now, self.windows, sleeping=False, silent_mode=False,
                                           hourly_fires=[], hourly_cap=2)
         self.assertIsNone(reason)
+
+    def test_strong_clear_affect_penetrates_closed_window_but_not_silence_or_sleep(self) -> None:
+        penetrating = [Window("exception", datetime(2026, 1, 1, 12, 0).time(),
+                              datetime(2026, 1, 1, 13, 0).time(), "allow", True)]
+        outside = datetime(2026, 1, 1, 10, 0)
+        args = dict(momentary_valence=-0.9, relation_tension=0.8)
+        self.assertIsNone(checkpoint_block_reason(outside, penetrating, False, False, [], 2, **args))
+        self.assertEqual(checkpoint_block_reason(outside, penetrating, True, False, [], 2, **args), "sleeping")
+        self.assertEqual(checkpoint_block_reason(outside, penetrating, False, True, [], 2, **args), "silent_mode")
+        self.assertEqual(checkpoint_block_reason(
+            outside, penetrating, False, False, [], 2, momentary_valence=0.05, relation_tension=1.0
+        ), "outside_window")
 
 
 class FrustrationCoolingTests(unittest.TestCase):

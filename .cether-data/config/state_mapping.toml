@@ -1,0 +1,35 @@
+# 四意愿变量 — 六维驱力映射表（v1）
+# 驱力: 一阶惯性滤波 D <- D + alpha * (T - D)，每轮逐维更新，结果截断到 [0, 1]。
+# 意愿: bias + sum(weights * D)，结果截断到 [0, 1]。
+
+[filter]
+alpha = 0.5
+
+[drives]
+# 顺序: 社交、好奇、玩耍、休息、认可、成就
+order = ["social", "curiosity", "play", "rest", "recognition", "achievement"]
+
+[willingness.social_battery]
+# 社交电量（强度）
+bias = 0.6
+weights = [0.2, 0.0, 0.1, -0.4, 0.1, 0.0]
+
+[willingness.connection_desire]
+# 连接渴望
+bias = 0.1
+weights = [0.4, 0.1, 0.1, 0.0, 0.3, 0.0]
+
+[willingness.expression_impulse]
+# 表达冲动
+bias = 0.1
+weights = [0.2, 0.3, 0.2, -0.2, 0.2, 0.0]
+
+[willingness.safety_boundary]
+# 安全感 / 边界（认可越追求越不安全，社交越强越不安全）
+bias = 0.6
+weights = [-0.2, 0.0, 0.0, 0.0, -0.1, 0.1]
+
+[bands]
+# 强度分档阈值
+high = 0.7
+low = 0.3

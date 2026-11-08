@@ -3,7 +3,19 @@ name = "cether"
 version = "0.1.0"
 description = "CetherYH character runtime core (v1 vertical slice)"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+  "Pillow>=10.0",
+  "mss>=9.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0",
+  "playwright>=1.50",
+]
+build = [
+  "pyinstaller>=6.10",
+]
 
 [build-system]
 requires = ["setuptools>=69"]

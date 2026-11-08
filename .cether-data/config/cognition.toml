@@ -1,0 +1,16 @@
+[decision]
+low_battery_threshold = 0.2
+low_impulse_threshold = 0.15
+default_priority = 0.5
+
+[expression]
+full_battery_threshold = 0.35
+short_prefix = ""
+refusal_text = "我现在有点累，但还在听。"
+
+[sleep]
+max_records = 2000
+duplicate_similarity = 0.8
+reflect_min_records = 3
+baseline_alpha = 0.1
+retrieval_bias_default = 1.0

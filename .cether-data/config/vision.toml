@@ -1,0 +1,7 @@
+# 视觉描述槽位（v1）。Key 不写在这里，只写环境变量名。
+# 与 CONFIG_FORM.md 第 2 节「视觉描述（屏幕）」保持一致。
+
+[vision]
+base_url = "https://www.sui-xiang.net/v1"
+model_id = "deepseek-v4.1-flash-1017"
+key_env = "CETHER_CHAT_API_KEY"

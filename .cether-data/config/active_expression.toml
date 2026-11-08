@@ -1,0 +1,29 @@
+# 主动表达调度配置
+
+# 主动表达候选主题生成
+[candidate_generation]
+# 回顾窗口（天数）：从多少天内的记忆中生成候选主题
+lookback_days = 14
+
+# 最小重要性阈值：只有重要性高于此值的记忆才会被考虑
+min_importance = 0.65
+
+# 冷却期（秒）：上次主动表达后需要等待的最短时间
+cooldown_seconds = 1800
+
+# 每日上限：每天最多主动表达的次数
+daily_cap = 3
+
+# 拒绝标签：包含这些标签的记忆不会被选为主动表达候选
+rejection_tags = ["private", "sensitive", "temporary"]
+
+# 候选来源优先级
+[sources]
+# 心事匣权重
+mind_box_weight = 3.0
+
+# 日记权重
+diary_weight = 2.0
+
+# 高权重记忆（L0）权重
+high_tier_memory_weight = 1.5

@@ -1,0 +1,27 @@
+[retrieval]
+# Maximum final lexical/hybrid matches injected into a conversation turn.
+top_k = 8
+min_score = 0.0
+bm25_k1 = 1.5
+bm25_b = 0.75
+rrf_k = 60
+vector_top_k = 10
+graph_top_k = 10
+graph_max_hops = 1
+graph_edge_min_weight = 0.0
+vector_weight = 1.0
+graph_weight = 1.0
+high_weight_cutoff = 0.8
+medium_weight_cutoff = 0.3
+lifecycle_tau_seconds = 604800.0
+lifecycle_min = 0.5
+rumination_threshold = 5
+rumination_penalty = 0.6
+# Map memory tags to present StateSnapshot dimension names, e.g. curiosity = "seeking".
+drive_weights = {}
+region_bonus = 1.2
+# Deterministic by default; jitter can be enabled after baseline evaluation.
+jitter_range = 0.0
+hexbit_decay_factor = 0.85
+hexbit_min_repeat = 1
+latency_budget_ms = 300.0

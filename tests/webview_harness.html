@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Cether UI contract harness</title>
+<iframe id="app" src="../../dist/index.html" style="width:390px;height:844px;border:0"></iframe>
+<script>
+const frame = document.querySelector('#app');
+frame.addEventListener('load', () => {
+  const target = frame.contentWindow;
+  const invoke = async (command, args = {}) => {
+    const action = command === 'app_bootstrap' ? 'bootstrap' : command === 'runtime_action' ? args.action : command;
+    const response = await fetch('/__runtime', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...args }) });
+    return (await response.json()).result;
+  };
+  target.__TAURI__ = { core: { invoke } };
+  target.fetch('/__runtime', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'app_bootstrap' }) }).then(() => target.location.reload());
+}, { once: true });
+</script>

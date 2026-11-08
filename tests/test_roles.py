@@ -148,6 +148,27 @@ class RoleRegistryTests(unittest.TestCase):
         self.registry.switch(self.two.role_id)
         self.assertTrue(pipeline.stop_requested)
 
+    def test_import_package_conflict_requires_explicit_rename_and_preserves_existing_role(self) -> None:
+        package = self.registry.export_package(self.one.role_id, self.tmp / "alpha.zip")
+        existing_workspace = self.one.workspace
+        existing_role_id = self.one.role_id
+        target = self.tmp / "imported-alpha"
+
+        with self.assertRaisesRegex(RoleError, "role name conflict requires rename or replace"):
+            self.registry.import_package(package, target, conflict="reject")
+
+        self.assertEqual(self.registry.active.config.role_id, existing_role_id)
+        self.assertTrue(existing_workspace.is_dir())
+        self.assertFalse(target.exists())
+        self.assertEqual(len(self.registry.list_roles()), 2)
+
+        imported = self.registry.import_package(
+            package, target, conflict="rename", renamed_to="Alpha Imported"
+        )
+        self.assertEqual(imported.name, "Alpha Imported")
+        self.assertTrue((target / "role.json").is_file())
+        self.assertEqual(len(self.registry.list_roles()), 3)
+
     def test_workspace_binding_requires_existing_directory_and_clean_or_role_marker(self) -> None:
         with self.assertRaises(RoleError):
             self.registry.create_role("Missing", self.tmp / "missing", bind_existing=True)

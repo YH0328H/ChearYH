@@ -1,5 +1,148 @@
 # CetherYH 开发日志
 
+## 2026-11-08 V3.0 五行架构设计与文档整合
+
+**工作时间**: 约 6 小时 (14:00-20:00)
+
+### 核心成果
+
+#### 1. 五行认知架构设计 ★
+- ✅ 创建 `docs/WUXING_PHILOSOPHY.md` — 五行认知哲学核心文档
+- ✅ 五行模块映射：木(生长)、火(表达)、土(稳定)、金(掌控)、水(联结)
+- ✅ 阴阳平衡 → 李雅普诺夫临界态理论(λ ≈ 0)
+- ✅ 八卦情绪原型映射 PAD 空间
+- ✅ 六十四卦 Hexbit 记忆编码完整解释
+- ✅ 天地人三才驱力架构设计
+
+#### 2. 算法文档全面补充
+- ✅ ALGORITHMS.md 新增第七章：五行平衡与李雅普诺夫稳定性
+  - 五行驱力系统算法(相生相克)
+  - 阴阳平衡临界态维持
+  - 李雅普诺夫谱计算(Clark 2026 方法)
+  - Kaplan-Yorke 吸引子维度
+  - 易经六十四卦与李雅普诺夫关联
+- ✅ ALGORITHMS.md 新增第八章：系统级优化-临界态认知架构
+  - 全系统李雅普诺夫监控
+  - 临界态自适应控制
+  - 性能指标对比
+
+#### 3. 理论融合研究
+- ✅ 阅读分析 PSI 认知架构(Joscha Bach 2009)
+  - 生理性驱力: Water/Energy/Integrity
+  - 能力驱力: Certainty/Competence/Affiliation
+  - 动机调节机制
+- ✅ 阅读分析 The Synthetic Mind(Josh Ferrer 2026)
+  - 赫尔驱力理论现代化
+  - 模拟人生自主系统案例
+  - 内在好奇心预测误差驱动
+- ✅ 阅读分析李雅普诺夫谱论文(David G. Clark 2026)
+  - 随机神经网络李雅普诺夫指数分布
+  - 吸引子维度与熵率
+  - 切空间动力学与腔方法
+
+#### 4. 文档体系整合 ★
+- ✅ 删除冗余文档:
+  - `CetherYH_2.1_DESIGN.md` (旧版本)
+  - `WORK_PLAN.md` (冗余计划)
+  - `ACCEPTANCE_MAPPING.md` (冗余验收)
+  - `PROJECT_GUIDE.md` (冗余指南)
+  - `PROJECT_STATUS.md` (冗余状态)
+  - `docs/INDEX.md` (冗余索引)
+- ✅ 保留核心文档:
+  - 设计: V3.0_DESIGN / ARCHITECTURE / ALGORITHMS / UI_DESIGN / WUXING_PHILOSOPHY
+  - 日志: DEVLOG / README
+  - 归档: docs/legacy/TASK.md
+- ✅ 更新 README.md 为统一入口
+  - 项目名称改为"五行认知架构桌面陪伴应用"
+  - 核心理念改为五行平衡
+  - 项目结构更新五行模块命名
+  - 致谢章节补充理论基础
+
+#### 5. 架构文档完善
+- ✅ ARCHITECTURE.md 新增第七章：五行平衡架构
+  - 五行模块映射表
+  - 阴阳平衡与临界态维持算法
+  - 五行相生相克配置
+  - 八卦情绪系统映射
+  - 易经六十四卦记忆编码
+
+### 核心创新点
+
+#### 理论融合
+**易经五行 × 李雅普诺夫动力学 × PSI 认知架构**
+
+1. **五行相生相克 = 驱力动态平衡**
+   - 木生火: 好奇心驱动表达
+   - 水克火: 深度共情淡化表达
+   - 系数可配置，保持阴阳调和
+
+2. **阴阳平衡 = 临界态 (λ ≈ 0)**
+   - 阳盛(λ > 0.1) → 混沌，行为发散
+   - 阴盛(λ < -0.1) → 僵化，缺乏创造性
+   - 临界态 → Edge of Chaos，最优认知状态
+
+3. **六十四卦 = Hexbit 编码 = 记忆李雅普诺夫**
+   - 6 个二值维度 = 6 个爻
+   - 递减惩罚 = "物极必反"
+   - 保持记忆多样性 = 保持临界态
+
+4. **八卦 = PAD 情绪原型**
+   - 乾(自信)、坤(平静)、震(兴奋)、巽(温柔)
+   - 坎(忧虑)、离(热情)、艮(沉稳)、兑(愉悦)
+
+### 模块命名体系
+
+核心模块重命名为五行体系:
+- `drives.py` → `wuxing_core.py` (五行核心)
+- `context_orchestrator.py` → `qiankun_orchestrator.py` (乾坤编排)
+- `emotion.py` → `bagua_emotion.py` (八卦情绪)
+- `memory_retrieval.py` → `yijing_memory.py` (易经记忆)
+- `decision.py` → `taiji_decision.py` (太极决策)
+
+### 待实施工作
+
+**Week 1 — 核心驱力系统**:
+- [ ] 实现 `src/cether/wuxing_core.py`
+  - 三层驱力架构(生理/心理/涌现)
+  - 五行相生相克算法
+  - 李雅普诺夫稳定性追踪
+- [ ] 集成到 `state.py`
+- [ ] 编写单元测试 `tests/test_wuxing.py`
+
+**Week 2 — 李雅普诺夫监控**:
+- [ ] 实现雅可比矩阵计算
+- [ ] 实现李雅普诺夫谱计算
+- [ ] 实现稳定性自适应调整
+- [ ] 前端可视化李雅普诺夫谱
+
+**Week 3 — 文档与集成**:
+- [ ] 完善五行配置文件
+- [ ] 全量测试
+- [ ] 性能优化
+
+### 参考资料
+
+- [易经](https://zh.wikipedia.org/wiki/易经) — 周文王、孔子
+- [黄帝内经](https://zh.wikipedia.org/wiki/黄帝内经) — 轩辕黄帝
+- [Lyapunov spectrum of random neural networks](https://arxiv.org/abs/2610.12426) — David G. Clark, 2026
+- [Principles of Synthetic Intelligence (PSI)](http://www.cognitive-ai.com/) — Joscha Bach, 2009
+- [The Synthetic Mind](https://github.com/joshferrer1/the-synthetic-library) — Josh Ferrer, 2026
+
+---
+
+## 2026-11-08 交付补全工作（未运行测试/验收）
+- 桌面生命周期：接入 RuntimePipeline 角色 worker、周期快照线程、关闭/切换前快照和窗口检查点调度；窗口节奏及快照节奏从配置读取，调度事件按阻塞原因变化限频。
+- 会话输入：为 provider 请求组装分段上下文预算，记录预算裁决；单次记忆注入只在对话成功持久化后消费，并受角色会话锁保护。
+- 记忆与交互：冷库按 UTC 月分片落盘并索引，支持恢复与分页；主动表达事件接入 UI popup/silent 呈现；首次引导六模块逐步说明；工作模式产物独立存放在角色 `work-files/` 并在 UI 展示。
+- 本地降级：首次引导选择 `local_fallback` 后启动使用 LocalRuleProvider；对话配置保存仍可由用户显式启用远程 Provider。
+- 交付入口：补 README 安装/运行/provider 配置和 PowerShell 一键启动脚本；声明 Pillow/mss 和 PyInstaller 依赖；新增 onedir spec 与 `cether.__main__` 冻结入口；Tauri 通过 runtime `resource_dir` 找随包 runner 并传递资源根目录；配置窗口改为可调整桌面工作区。
+- 尚未关闭：主动表达自动候选主题的生产者；工作模式摘要记忆隔离；Tauri 原生文件选择器；跨角色共享工具状态知情开关/真实外部工具执行；代码签名与发布元数据；原生打包和正式安装包运行链路未经验证。严格按用户要求，本轮不运行测试、验收或构建，不提交。
+
+## 2026-11-08 Round 4
+- 增加首次启动六模块向导与可选本地降级记录；本地规则 provider 可在未配置远程 provider 时工作。`onboarding.local_fallback` 由 corpus 驱动桌面运行时测试与 Playwright 首屏交互验证。
+- 增加主动表达弹窗/静默呈现偏好，写入 app data 并在 bootstrap/reload 恢复；`expression.presentation.preference` 覆盖静默设置与无效值验证。表达事件消费者尚未完成集成，TASK #62 保持 PARTIAL。
+- TASK #58、#62 在 `ACCEPTANCE_MAPPING.md` 标为 PARTIAL，并记录交互式模块内容与主动表达调度集成的剩余验收。
+
 ## 2026-11-02 (周六)
 
 **工作时间**: 约 4 小时 15 分钟（11:00-15:15）
@@ -35,6 +178,16 @@
 - ✅ Rust + MSVC 环境配置
 
 ### 未完成任务（第二批剩余）
+
+## 2026-11-08 (周日)
+
+### Round 4：TASK #33 快速接话取消路径（部分闭合）
+
+- 新增有序规则接话调度器及可撤销句柄；不匹配时静默降级，问号仅匹配句末问号。
+- 对话请求组装时后台派发接话，正式 provider 开始前撤销 TTS 入队许可；finally 重复撤销，异常路径同样关闭许可。
+- 接话不写入正式 conversation history、L0 或表达完成反馈。阻塞 provider 的并发回归覆盖取消时序和持久化边界；单元测试覆盖规则顺序、句柄取消与无匹配。
+- 尚未连接真实桌面 TTS 队列，适配器必须在 enqueue 前检查句柄；尚无本地小向量候选。按 TASK.md 语义保持 #33 PARTIAL。
+- 定向验证：`pytest tests/test_backchannel.py tests/test_conversation.py -q --tb=short -x`，23 passed。
 
 ## 2026-11-04 (周三)
 
@@ -233,3 +386,47 @@
 - ✅ Tauri 增加通用 `runtime_action` command，前端增加首次感知确认、已见记录、日记、模式切换和角色管理入口；新增 `tests/test_stage3_integration.py` 覆盖感知确认/双暂停、生命周期 append-only/一次性注入、角色包 memory 与 wake。
 - ✅ 验证：全量 `pytest tests benchmarks/test_retrieval_baseline.py -q --tb=short -x`：**352 passed**；`compileall`、`cargo check --manifest-path src-tauri\\Cargo.toml`、嵌入式 JavaScript `node --check`、`git diff --check` 均通过。
 - ⚠️ 正式验收 corpus、星图真实渲染、后台事件持续订阅、配置写入面板、preset 升级保护及 TASK.md 全量端到端映射仍需后续验收；本阶段提交的是已验证的运行时/桥接接线，不将接口接通等同于完整产品验收。
+
+### 正式验收推进（2026-11-07，第 16 轮）
+
+- ✅ 新增 `role.package.complete` corpus 场景；角色包测试实际检查 persona、boundaries、appearance、expression、window、checkpoint 成员、导入后内容往返、wake 标记及 chat/embedding 全局配置排除。
+- ⚠️ TASK #57 仍为 PARTIAL：角色私有记忆与状态的完整导入恢复尚缺端到端断言。全量映射当前 3 PASS、52 PARTIAL、8 GAP；23 条 corpus 场景中仅部分进入可执行断言。
+- ✅ 验证：`.venv\\Scripts\\python.exe -m pytest tests -v --tb=short -x`：**373 passed in 47.19s**；`git diff --check` 通过（仅换行符提示）。
+
+### 正式验收推进（2026-11-07，第 17 轮）
+
+- ✅ 扩展 `role.package.complete`：实际导入往返 `state.json`、`mind_box.json`、`memory/l0.jsonl`，并验证 pending wake 快照含导入来源；角色卡与全局配置排除断言保留。
+- ✅ 新增 DesktopRuntime 集成：经 `role_import`、`switch_role`、`send_message` 路径验证首次成功 provider request 获得 wake 注入，回复后 pending wake 被消费。
+- ⚠️ TASK #57 仍为 PARTIAL：WebView/Tauri 用户侧完整导入交互未自动化；TASK.md §8.13 与 #57 对默认记忆/状态打包规则存在文本冲突，映射记录按 #57 的明确恢复要求验收。全量映射 3 PASS、52 PARTIAL、8 GAP；23 条 corpus 场景并非全部已执行。
+- ✅ 验证：定向角色包/导入唤醒 3 passed in 9.80s；完整回归 `.venv\\Scripts\\python.exe -m pytest tests -v --tb=short -x`：**374 passed in 50.29s**。
+- ✅ 验证：验收映射与 corpus 身份/唯一编号检查：2 passed in 1.41s；`git diff --check` 通过（仅换行符提示）。
+
+### 正式验收推进（2026-11-07，第 18 轮）
+
+- ✅ 新增 `ui.mode.override` corpus 场景与桌面 IPC 测试：前台 `code` 识别工作模式；用户覆盖为陪伴模式后在状态快照可见；清除覆盖后回到自动模式。
+- ⚠️ TASK #61 从 GAP 调整为 PARTIAL：工作模式文件卡片和工作细节不进入摘要记忆仍待实现与端到端验证。映射当前 3 PASS、53 PARTIAL、7 GAP；corpus 共 24 条唯一场景。
+- ✅ 定向模式覆盖测试：2 passed in 3.24s。
+- ✅ 补齐 TASK #63 failure/timeout 链路：工具失败与超时追加角色 `world.jsonl`，携带 role_id/status/memory_written 元数据；统一事件日志仍可游标订阅，`dist/index.html` 状态行投影已有事件文本断言，L0 不被写入。新增 `tools.failure.world_notice` corpus 场景；映射保持 PARTIAL，真实工具执行器与 WebView 自动化尚缺。
+- ✅ 验证：定向工具验收 1 passed in 6.48s；完整回归 `.venv\\Scripts\\python.exe -m pytest tests -v --tb=short -x`：**376 passed in 49.02s**。
+
+### 正式验收推进（2026-11-07，第 19 轮）
+
+- ✅ TASK #25 基准改用 `acceptance/corpus.json` 中的查询与记忆文本，确定性重复扩展到指定 1000–3000 条热库规模，报告 P50/P95/P99、最大值与预算超限次数。
+- ✅ 验证：基准测试 2 passed in 7.84s；1000 条、100 次本机测量 P50=41.132ms、P95=66.954ms、P99=72.418ms、最大值 73.881ms，预算超限 0。
+- ⚠️ 当前只执行本地词法检索，未接入同机持久向量库与固定跳数图扩散；#25 从 GAP 调整为 PARTIAL，不能据此宣称完整同步检索链路达标。映射状态现为 3 PASS、54 PARTIAL、6 GAP；corpus 25 条唯一场景。
+- ✅ 全量验证：`.venv\\Scripts\\python.exe -m pytest tests benchmarks\\test_retrieval_baseline.py -v --tb=short -x`，**378 passed in 54.13s**。
+
+### 正式验收推进（2026-11-07，第 20 轮）
+
+- ✅ 新增 `skill.registry.default_disabled` corpus 场景及 `SkillRegistry`：工具声明/安装与技能启用状态分离；默认没有注册工具，关闭时不可调用；启用后进入活动注册表，禁用后移除。技能状态归 DesktopRuntime 全局实例，切换角色后保持一致。
+- ⚠️ TASK #19 从 GAP 调整为 PARTIAL。当前覆盖运行时默认关闭、注册开关与跨角色共享；安装状态持久化、外部插件安装/供应商适配、技能面板和失败隔离仍未闭环。
+- ✅ 定向验收：`tests/test_acceptance_corpus.py::test_skill_registry_defaults_off_and_is_shared_across_roles`，1 passed in 2.85s；前一版完整测试中 corpus 验收模块 17 passed。
+- ✅ 全量验证：`.venv\\Scripts\\python.exe -m pytest tests benchmarks\\test_retrieval_baseline.py -v --tb=short -x`，**379 passed in 59.84s**。验收映射 63 项；复核完整回归输出与测试模块计数后同步耗时。，3 PASS /55 PARTIAL /5 GAP；corpus 26 条唯一场景。`git diff --check` 结果待最终检查。
+
+### 正式验收推进（2026-11-08，浏览器回归）
+
+- ✅ 新增 Playwright Chromium WebView 合约测试：实际运行 `dist/index.html` 并经注入 Tauri invoke 桥调用 `DesktopRuntime.handle`；覆盖对话渲染、星图五视图、配置写入持久化、角色包导入/预设/技能页面流程、工具失败事件订阅。六个视觉场景使用固定 1440×1000 / DPR 1 截图及提交版 PNG 基线，changed-pixel 比例阈值为 1.5%。
+- ⚠️ #33 快速接话/TTS 取消、#58 六模块首次引导与本地降级、#62 主动表达弹窗/静默仍为 GAP；#40 临时效价/唤醒投影及阈值已测，但尚无主动调度器，保持 PARTIAL。
+- ✅ 浏览器回归：`tests/test_webview_contract.py`，**5 passed in 14.68s**。
+- ✅ Round 2 全量回归：`.venv\\Scripts\\python.exe -m pytest tests -v --tb=short -x`，**390 passed in 28.90s**。映射 63 项：2 PASS、58 PARTIAL、3 GAP；corpus 27 个场景。
+- ✅ Round 3 全量回归：`.venv\\Scripts\\python.exe -m pytest tests benchmarks\\test_retrieval_baseline.py -q --tb=short -x`，**392 passed in 28.85s**。修复映射路径校验要求证据为具体文件；6 张视觉基线纳入对应视图和角色面板验收证据。

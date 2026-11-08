@@ -1,0 +1,12 @@
+{
+  "files": {
+    "companion.yaml": {
+      "sha256": "a323d21e87eb9af362666ae97214ce06dc533b2d35bd892b463c026e42048998",
+      "version": "1"
+    },
+    "work.yaml": {
+      "sha256": "922d82629976c0a75fe1cd0369f49d3e39fe1809af0fa92a064661d8caa89ba5",
+      "version": "1"
+    }
+  }
+}

@@ -47,6 +47,40 @@ def test_memory_lifecycle_and_diary_are_role_local_and_append_only(tmp_path: Pat
     assert runtime._consume_injections()[0]["id"] == record["id"]
 
 
+def test_cold_memory_recovery_routes_keep_storage_semantics(tmp_path: Path) -> None:
+    runtime = DesktopRuntime(tmp_path)
+    memory_ids = []
+    for text in ("boost cold memory", "move cold memory", "inject cold memory"):
+        runtime.handle({"action": "ui_action", "ui_action": UiAction.REMEMBER_THIS.value,
+                        "payload": {"text": text}})
+        memory_ids.append(list(runtime._lifecycle.archive)[-1]["id"])
+    archive_path = runtime._lifecycle.archive.path
+    l0_before = archive_path.read_bytes()
+
+    for memory_id in memory_ids:
+        runtime.handle({"action": "ui_action", "ui_action": UiAction.ARCHIVE_MEMORY.value,
+                        "payload": {"memory_id": memory_id, "choice": "move_to_cold"}})
+    assert set(memory_ids).issubset(runtime._lifecycle.excluded_ids())
+
+    boosted = runtime.handle({"action": "ui_action", "ui_action": UiAction.RESTORE_MEMORY.value,
+                              "payload": {"memory_id": memory_ids[0], "choice": "boost"}})
+    moved = runtime.handle({"action": "ui_action", "ui_action": UiAction.RESTORE_MEMORY.value,
+                            "payload": {"memory_id": memory_ids[1], "choice": "move_to_hot"}})
+    injected = runtime.handle({"action": "ui_action", "ui_action": UiAction.RESTORE_MEMORY.value,
+                               "payload": {"memory_id": memory_ids[2], "choice": "inject_once"}})
+
+    assert boosted["payload"]["result"]["status"] == "hot"
+    assert runtime._lifecycle.annotate(runtime._lifecycle._record(memory_ids[0]))["lifecycle_weight_factor"] == 1.5
+    assert moved["payload"]["result"]["status"] == "hot"
+    assert runtime._lifecycle.annotate(runtime._lifecycle._record(memory_ids[1]))["lifecycle_weight_factor"] == 1.0
+    assert injected["payload"]["storage_unchanged"] is True
+    assert memory_ids[2] in runtime._lifecycle.excluded_ids()
+    assert runtime._consume_injections()[0]["id"] == memory_ids[2]
+    assert runtime._consume_injections() == ()
+    assert archive_path.read_bytes() == l0_before
+    runtime.handle({"action": "shutdown"})
+
+
 def test_role_actions_and_mode_are_exposed_by_desktop_runtime(tmp_path: Path) -> None:
     runtime = DesktopRuntime(tmp_path)
     role_id = runtime.registry.active.config.role_id
@@ -65,6 +99,7 @@ def test_role_package_includes_owned_memory_and_wakes_on_import(tmp_path: Path) 
     source = registry.create_role("Source", tmp_path / "source")
     registry.switch(source.role_id)
     L0Archive(source.workspace / "memory" / "l0.jsonl").append("owned memory", "test")
+    (source.workspace / "self_awareness.md").write_text("我知道自己会暂停。", encoding="utf-8")
     package = tmp_path / "source.cether-role"
     registry.export_package(source.role_id, package)
     with __import__("zipfile").ZipFile(package) as archive:
@@ -77,4 +112,5 @@ def test_role_package_includes_owned_memory_and_wakes_on_import(tmp_path: Path) 
     registry.switch(target.role_id)
     imported = registry.import_package(package, tmp_path / "imported", conflict="rename", renamed_to="Imported")
     assert (imported.workspace / "memory" / "l0.jsonl").exists()
+    assert (imported.workspace / "self_awareness.md").read_text(encoding="utf-8") == "我知道自己会暂停。"
     assert registry.pending_wake(imported.role_id) is not None

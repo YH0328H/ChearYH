@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "alpha": 0.7,
+  "relation_tension": 0.7,
+  "momentary_valence": 0.0,
+  "scenarios": [
+    {
+      "name": "想靠近但不敢",
+      "current_drives": {"seeking": 0.5, "affiliation": 0.8, "competence": 0.5, "certainty": 0.5, "care": 0.8, "play": 0.5},
+      "target_drives": {"seeking": 0.9, "affiliation": 1.0, "competence": 0.6, "certainty": 0.2, "care": 1.0, "play": 0.7},
+      "filtered_drives": {"seeking": 0.62, "affiliation": 0.86, "competence": 0.53, "certainty": 0.41, "care": 0.86, "play": 0.56},
+      "current_social_battery": 0.8,
+      "target_social_battery": 0.8,
+      "expected_will": {"social_battery": 0.8, "connection_desire": 0.86, "expression_impulse": 0.572, "security": 0.204},
+      "expected_tension_states": ["想靠近但不敢"]
+    },
+    {
+      "name": "累了但舍不得走",
+      "current_drives": {"seeking": 0.5, "affiliation": 0.6, "competence": 0.5, "certainty": 0.5, "care": 0.5, "play": 0.5},
+      "target_drives": {"seeking": 0.7, "affiliation": 0.9, "competence": 0.6, "certainty": 0.4, "care": 0.9, "play": 0.7},
+      "filtered_drives": {"seeking": 0.56, "affiliation": 0.69, "competence": 0.53, "certainty": 0.47, "care": 0.62, "play": 0.56},
+      "current_social_battery": 0.2,
+      "target_social_battery": 0.1,
+      "expected_will": {"social_battery": 0.17, "connection_desire": 0.669, "expression_impulse": 0.548, "security": 0.264},
+      "expected_tension_states": ["累了但舍不得走"]
+    }
+  ]
+}

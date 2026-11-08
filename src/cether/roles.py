@@ -25,6 +25,7 @@ from .wake import WakePayload, WakeState
 MAX_ROLES = 5
 ROLE_CARD_FILES = (
     "persona.md",
+    "self_awareness.md",
     "boundaries.md",
     "appearance.json",
     "expression.json",
