@@ -1,0 +1,22 @@
+# TTS（文本转语音）配置
+
+[tts]
+# 是否启用 TTS
+enabled = true
+
+# 语音选择（Edge TTS 支持的声音）
+# 中文女声：zh-CN-XiaoxiaoNeural（晓晓，温柔）、zh-CN-XiaoyiNeural（晓伊，亲切）
+# 中文男声：zh-CN-YunxiNeural（云希）、zh-CN-YunyangNeural（云扬）
+voice = "zh-CN-XiaoxiaoNeural"
+
+# 语速：-50% 到 +100%（+20% 表示快 20%）
+rate = "+0%"
+
+# 音量：-50% 到 +50%
+volume = "+0%"
+
+# 音调：-50Hz 到 +50Hz
+pitch = "+0Hz"
+
+# 缓存清理阈值（保留最近的 N 个音频文件）
+max_cache_files = 50

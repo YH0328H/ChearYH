@@ -93,7 +93,7 @@ class ConversationService:
                 self._l0.append(value, "proactive_expression")
             return turn
 
-    def _respond(self, text: str, *, persist_user: bool, kind: str, persist: bool = True) -> ConversationTurn:
+    def _respond(self, text: str, *, persist_user: bool, kind: str, persist: bool = True, mode: str = "companion") -> ConversationTurn:
         user_text = text.strip()
         if not user_text:
             raise ValueError("message must not be empty")
@@ -163,10 +163,12 @@ class ConversationService:
             now = self.clock().isoformat()
             user_turn = ConversationTurn("user", user_text, now, "user", "neutral")
             assistant_turn = ConversationTurn("assistant", response.text.strip(), now, response.kind, response.emotion, directive, resolved_data)
-            self._append(user_turn)
-            self._append(assistant_turn)
-            self._l0.append(user_text, "conversation")
-            self._l0.append(response.text.strip(), "conversation")
+            # Only persist in companion mode, skip in work mode
+            if mode == "companion":
+                self._append(user_turn)
+                self._append(assistant_turn)
+                self._l0.append(user_text, "conversation")
+                self._l0.append(response.text.strip(), "conversation")
             feedback = self.runtime._feed_result(None, asdict(response), StateSnapshot(self.clock().timestamp(), state))
             self._commit_injections()
             self._write_continuation_summary()

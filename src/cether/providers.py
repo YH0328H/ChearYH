@@ -149,3 +149,64 @@ def load_provider_config(path: str | os.PathLike[str]) -> ProviderConfig:
         timeout_seconds=float(raw.get("timeout_seconds", ProviderConfig.timeout_seconds)),
         temperature=float(raw.get("temperature", ProviderConfig.temperature)),
     )
+
+
+
+class OllamaProvider:
+    """Local Ollama model provider (OpenAI-compatible API)."""
+    
+    def __init__(self, config: ProviderConfig) -> None:
+        # Override base_url to Ollama default
+        self.config = ProviderConfig(
+            base_url="http://localhost:11434/v1",
+            model_id=config.model_id or "qwen2.5:3b",  # Default small model
+            temperature=config.temperature,
+            key_env="",  # Ollama doesn't need API key
+        )
+        self.inner = OpenAICompatibleProvider(self.config)
+    
+    def respond(self, request: TurnRequest) -> TurnResponse:
+        """Forward to OpenAICompatibleProvider with Ollama config."""
+        return self.inner.respond(request)
+
+
+class FallbackProvider:
+    """Conversation provider with automatic fallback chain.
+    
+    Tries providers in order:
+    1. Primary provider (usually cloud API)
+    2. Ollama local model (if enabled)
+    3. LocalRuleProvider (always works)
+    """
+    
+    def __init__(
+        self,
+        primary: ConversationProvider,
+        enable_ollama: bool = False,
+        ollama_config: ProviderConfig | None = None,
+    ) -> None:
+        self.primary = primary
+        self.enable_ollama = enable_ollama
+        self.ollama = OllamaProvider(ollama_config) if enable_ollama and ollama_config else None
+        self.fallback = LocalRuleProvider()
+    
+    def respond(self, request: TurnRequest) -> TurnResponse:
+        """Try providers in fallback order, return first success."""
+        # Try primary provider
+        try:
+            return self.primary.respond(request)
+        except Exception as e:
+            print(f"[Fallback] Primary provider failed: {e}")
+        
+        # Try Ollama if enabled
+        if self.ollama:
+            try:
+                response = self.ollama.respond(request)
+                print("[Fallback] Using Ollama local model")
+                return response
+            except Exception as e:
+                print(f"[Fallback] Ollama failed: {e}")
+        
+        # Use rule-based fallback (always succeeds)
+        print("[Fallback] Using local rule provider")
+        return self.fallback.respond(request)

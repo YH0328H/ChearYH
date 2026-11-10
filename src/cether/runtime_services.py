@@ -22,6 +22,9 @@ from .roles import RoleContext, RoleRegistry
 from .runner import RuntimeConfig, RuntimePipeline, RuntimeSteps, ScopeGuard
 from .state import StateSnapshot
 from .trigger import EventContext, TriggerConfig, should_trigger_l1
+from .proactive import ProactiveCandidate, ProactiveScheduler, load_proactive_config
+from .tts import TTSService, TTSConfig, load_tts_config
+from .backchannel import BackchannelScheduler, BackchannelHandle, BackchannelConfig
 
 
 @dataclass(frozen=True)
@@ -33,8 +36,6 @@ class FeedbackConfig:
     def __post_init__(self) -> None:
         if any(v < 0 or v > 1 for v in (self.full_expression_cost, self.short_expression_cost, self.soft_refusal_recovery)):
             raise ValueError("feedback amounts must be between 0 and 1")
-
-
 class RuntimeServices:
     """Bind concrete per-role archives/state to pipeline with provider callbacks."""
 
@@ -100,6 +101,30 @@ class RuntimeServices:
             self._unregister_canceller = registry.register_task_canceller(role.config.role_id, self.cancel)
         self._l0 = L0Archive(role.workspace / "memory" / "l0.jsonl")
         self._l1 = L1Archive(role.workspace / "memory" / "l1.jsonl")
+
+        # Proactive expression scheduler
+        proactive_config_path = role.workspace.parent.parent / "config" / "proactive.toml"
+        if proactive_config_path.exists():
+            proactive_cfg = load_proactive_config(proactive_config_path)
+            self.proactive_scheduler = ProactiveScheduler(proactive_cfg)
+        else:
+            self.proactive_scheduler = None
+
+        # Initialize TTS service
+        tts_cfg_path = role.workspace.parent.parent / "config" / "tts.toml"
+        tts_cfg = load_tts_config(tts_cfg_path) if tts_cfg_path.exists() else TTSConfig()
+        self.tts_service = TTSService(tts_cfg)
+        
+        # Initialize backchannel scheduler
+        def deliver_backchannel(handle: BackchannelHandle) -> None:
+            """Deliver backchannel response via TTS."""
+            if handle.may_enqueue_tts():
+                audio_path = self.tts_service.speak(handle.text)
+                if audio_path:
+                    # TODO: Queue audio playback (requires frontend integration)
+                    print(f"[Backchannel] Generated TTS: {handle.text} -> {audio_path}")
+        
+        self.backchannel = BackchannelScheduler(deliver=deliver_backchannel)
 
     def get_current_mode(self) -> str:
         """Return current mode from mode provider or default to companion."""
@@ -327,6 +352,9 @@ class RuntimeServices:
 
     def _read_state(self) -> dict[str, Any]:
         with self._lock:
+            # Support both StateSnapshot and dict (for testing)
+            if isinstance(self._state, dict):
+                return dict(self._state)
             return dict(self._state.dimensions)
 
     def _load_state(self) -> StateSnapshot:
@@ -353,6 +381,61 @@ def _event_text(event: Any) -> str:
         return str(description)
     return "" if event is None else ""
 
+
+
+    def tick_proactive_scheduler(self, context: dict[str, Any]) -> ProactiveCandidate | None:
+        """Run one proactive scheduler tick. Returns a candidate if one passes gates."""
+        if self.proactive_scheduler is None:
+            return None
+        
+        return self.proactive_scheduler.tick(context)
+    
+    def generate_proactive_expression(
+        self,
+        candidate: ProactiveCandidate,
+        state: dict[str, Any],
+        provider: Any,
+    ) -> dict[str, Any] | None:
+        """Generate expression text for a proactive candidate using the expression provider."""
+        # Build a minimal request for the expression provider
+        request = {
+            "kind": "proactive",
+            "trigger": candidate.trigger_kind,
+            "reason": candidate.reason,
+            "topic": candidate.topic,
+            "metadata": candidate.metadata,
+            "state": state,
+        }
+        
+        try:
+            # Use the expression provider to generate appropriate text
+            if hasattr(provider, "generate_proactive"):
+                response = provider.generate_proactive(request)
+            else:
+                # Fallback: use default templates
+                response = self._default_proactive_template(candidate)
+            
+            return response
+        except Exception as exc:
+            return None
+    
+    def _default_proactive_template(self, candidate: ProactiveCandidate) -> dict[str, Any]:
+        """Provide default proactive expression templates."""
+        templates = {
+            "idle": "好久没见到你了，在忙什么呢？",
+            "stress": "看起来遇到困难了，需要帮助吗？",
+            "mindbox": f"你之前提到的{candidate.topic or '那件事'}，现在怎么样了？",
+            "weather": "天气变化了，记得注意一下~",
+        }
+        
+        text = templates.get(candidate.trigger_kind, "在想你呢~")
+        
+        return {
+            "text": text,
+            "kind": "proactive",
+            "emotion": "gentle",
+            "directive": {},
+        }
 
 def _atomic_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

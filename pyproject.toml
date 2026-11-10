@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
   "Pillow>=10.0",
   "mss>=9.0",
+    "edge-tts>=7.0.0",
 ]
 
 [project.optional-dependencies]

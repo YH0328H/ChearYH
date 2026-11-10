@@ -36,7 +36,7 @@ from .memory_lifecycle import MemoryLifecycleService
 from .mode import ModeController
 from .perception import Perceiver
 from .perception_config import load_perception_config
-from .providers import LocalRuleProvider, OpenAICompatibleProvider, load_provider_config
+from .providers import LocalRuleProvider, OpenAICompatibleProvider, load_provider_config, FallbackProvider
 from .sensing import FirstRunNotice, list_seen
 from .retrieval import embed_texts, load_embedding_config
 from .memory_retrieval import tokenize
@@ -109,6 +109,13 @@ class DesktopRuntime:
 
     def handle(self, request: dict[str, Any]) -> dict[str, Any]:
         action = request.get("action")
+        
+        if action == "backchannel":
+            return self._handle_backchannel(request)
+        if action == "complete_onboarding":
+            return self._complete_onboarding(request)
+        if action == "set_mode":
+            return self._set_mode(request)
         if action == "bootstrap":
             return self._bootstrap()
         if action == "create_role":
@@ -244,6 +251,11 @@ class DesktopRuntime:
         if action == "memory_starfield":
             page = self.ui.memory_timeline(None, 500) if self.ui else None
             return self._starfield(list(page.records) if page else [])
+        if action == "check_proactive":
+            return self._check_proactive(request)
+        if action == "send_proactive":
+            return self._send_proactive(request)
+
         if action == "shutdown":
             self._stop_role_workers()
             self._snapshot_stop.set()
@@ -256,6 +268,29 @@ class DesktopRuntime:
         raise ValueError(f"unknown action: {action}")
 
     def _bootstrap(self) -> dict[str, Any]:
+        # Load onboarding module details
+        onboarding_config_path = self.data_dir / "config" / "onboarding.toml"
+        onboarding_modules = []
+        if onboarding_config_path.exists():
+            import tomllib
+            try:
+                with open(onboarding_config_path, "rb") as f:
+                    onboarding_toml = tomllib.load(f)
+                    onboarding_modules = onboarding_toml.get("modules", [])
+            except Exception:
+                pass
+        
+        # Use default module names if config not loaded
+        if not onboarding_modules:
+            onboarding_modules = [
+                {"id": "conversation", "name": "对话与角色", "order": 1},
+                {"id": "memory", "name": "记忆分层", "order": 2},
+                {"id": "perception", "name": "感知授权", "order": 3},
+                {"id": "window", "name": "窗口与休眠", "order": 4},
+                {"id": "skills", "name": "技能与工具", "order": 5},
+                {"id": "config", "name": "配置与降级", "order": 6},
+            ]
+        
         onboarding_path = self.data_dir / "onboarding.json"
         try:
             onboarding_state = json.loads(onboarding_path.read_text(encoding="utf-8")) if onboarding_path and onboarding_path.is_file() else {}
@@ -270,7 +305,7 @@ class DesktopRuntime:
             "expression_presentation": presentation.get("mode", "popup"),
             "onboarding": {"completed": bool(onboarding_state.get("completed")),
                            "local_fallback": bool(onboarding_state.get("local_fallback")),
-                           "modules": ["对话与角色", "记忆分层", "感知授权", "窗口与休眠", "技能与工具", "配置与降级"]},
+                           "modules": onboarding_modules},
             "active_role": self._role_view(self.registry.active, active=True),
             "skills": self.skills.snapshot(),
             "roles": [self._role_view(_context(r), active=r.role_id == self.registry.active.config.role_id if self.registry.active else False)
@@ -343,17 +378,55 @@ class DesktopRuntime:
             sleep_mode=lambda active_role, now: sleep_schedule(now),
             mode_provider=lambda: self._mode.state(self._foreground_app()).mode,
         )
-        provider = LocalRuleProvider()
+        # Load provider with fallback support
         onboarding_path = self.data_dir / "onboarding.json"
         try:
             onboarding_state = json.loads(onboarding_path.read_text(encoding="utf-8"))
         except (OSError, ValueError, TypeError):
             onboarding_state = {}
+        
         config_path = Path(os.environ.get("CETHER_CHAT_CONFIG", self.data_dir / "chat.toml"))
-        if not onboarding_state.get("local_fallback") and config_path.is_file():
+        
+        # If user chose local-only mode, use LocalRuleProvider directly
+        if onboarding_state.get("local_fallback"):
+            provider = LocalRuleProvider()
+        elif config_path.is_file():
             config = load_provider_config(config_path)
+            
+            # Check if API key is available for primary provider
             if config.api_key():
-                provider = OpenAICompatibleProvider(config)
+                primary = OpenAICompatibleProvider(config)
+                
+                # Check if Ollama fallback is enabled
+                import tomllib
+                with open(config_path, "rb") as f:
+                    toml_data = tomllib.load(f)
+                
+                enable_ollama = toml_data.get("fallback", {}).get("enable_ollama", False)
+                ollama_config = None
+                
+                if enable_ollama:
+                    from .providers import ProviderConfig
+                    ollama_model = toml_data.get("fallback", {}).get("ollama_model", "qwen2.5:3b")
+                    ollama_url = toml_data.get("fallback", {}).get("ollama_url", "http://localhost:11434/v1")
+                    ollama_config = ProviderConfig(
+                        base_url=ollama_url,
+                        model_id=ollama_model,
+                        temperature=config.temperature,
+                        key_env="",
+                    )
+                
+                provider = FallbackProvider(
+                    primary=primary,
+                    enable_ollama=enable_ollama,
+                    ollama_config=ollama_config,
+                )
+            else:
+                # No API key, use local rule provider
+                provider = LocalRuleProvider()
+        else:
+            # No config file, use local rule provider
+            provider = LocalRuleProvider()
         self.conversation = ConversationService(
             role=role, registry=self.registry, runtime=self.runtime, provider=provider,
             retrieval_config=RetrievalConfigWatcher(self.config_dir / "retrieval.toml"),
@@ -1044,6 +1117,168 @@ class DesktopRuntime:
                 "active": active, "self_awareness": context.config.self_awareness}
 
 
+
+    
+    def _set_mode(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Manually override companion/work mode."""
+        mode = request.get("mode")
+        if mode not in {None, "companion", "work"}:
+            return {"success": False, "error": "mode must be companion, work, or None"}
+        
+        try:
+            new_state = self._mode.set_override(mode)
+            return {
+                "success": True,
+                "mode": new_state.mode,
+                "source": new_state.source,
+            }
+        except ValueError as e:
+            return {"success": False, "error": str(e)}
+
+    def _complete_onboarding(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Mark onboarding as completed and save preferences."""
+        onboarding_path = self.data_dir / "onboarding.json"
+        
+        # Load existing state
+        try:
+            if onboarding_path.exists():
+                onboarding_state = json.loads(onboarding_path.read_text(encoding="utf-8"))
+            else:
+                onboarding_state = {}
+        except (OSError, json.JSONDecodeError):
+            onboarding_state = {}
+        
+        # Update state
+        onboarding_state["completed"] = True
+        onboarding_state["completed_at"] = datetime.now(timezone.utc).isoformat()
+        
+        # Save user preferences from request
+        preferences = request.get("preferences", {})
+        if "local_fallback" in preferences:
+            onboarding_state["local_fallback"] = bool(preferences["local_fallback"])
+        
+        # Save state
+        try:
+            onboarding_path.write_text(json.dumps(onboarding_state, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError as e:
+            return {"success": False, "error": str(e)}
+        
+        return {
+            "success": True,
+            "message": "引导已完成！开始使用吧~",
+        }
+
+    def _handle_backchannel(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Handle backchannel (quick acknowledgement) request."""
+        if not self.runtime or not self.runtime.backchannel:
+            return {"acknowledged": False}
+        
+        user_text = request.get("text", "")
+        if not user_text:
+            return {"acknowledged": False}
+        
+        # Start backchannel (returns handle if triggered, None otherwise)
+        handle = self.runtime.backchannel.start(user_text)
+        
+        if handle:
+            return {
+                "acknowledged": True,
+                "text": handle.text,
+                "handle_id": id(handle),  # For potential cancellation
+            }
+        
+        return {"acknowledged": False}
+
+    def _check_proactive(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Check if a proactive expression candidate is available."""
+        if not self.runtime or not self.runtime.proactive_scheduler:
+            return {"candidate": None}
+        
+        # Build context from current runtime state
+        state = self.runtime._read_state()
+        role = self.runtime.role if self.runtime else None
+        context = {
+            "last_interaction_ts": state.get("last_interaction_ts"),
+            "perception": request.get("perception", {}),
+            "window": state.get("window", {}),
+            "mode": self._mode.state(self._foreground_app()).mode,
+            "mind_box": self._load_mind_box(role.workspace).items if role else [],
+            "weather": request.get("weather"),
+        }
+        
+        # Call scheduler directly
+        candidate = self.runtime.proactive_scheduler.tick(context)
+        
+        if candidate:
+            return {
+                "candidate": {
+                    "trigger_kind": candidate.trigger_kind,
+                    "priority": candidate.priority,
+                    "reason": candidate.reason,
+                    "topic": candidate.topic,
+                    "metadata": candidate.metadata,
+                }
+            }
+        return {"candidate": None}
+
+    
+    
+    def _send_proactive(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Generate and send a proactive expression."""
+        if not self.runtime or not self.runtime.proactive_scheduler:
+            return {"success": False, "error": "scheduler_not_available"}
+        
+        candidate_data = request.get("candidate")
+        if not candidate_data:
+            return {"success": False, "error": "missing_candidate"}
+        
+        # Reconstruct candidate from data
+        from cether.proactive import ProactiveCandidate
+        candidate = ProactiveCandidate(
+            trigger_kind=candidate_data["trigger_kind"],
+            priority=candidate_data["priority"],
+            reason=candidate_data["reason"],
+            topic=candidate_data.get("topic"),
+            metadata=candidate_data.get("metadata"),
+        )
+        
+        # Generate expression text using simple template
+        templates = {
+            "idle": "好久没见到你了，在忙什么呢？",
+            "stress": "看起来遇到困难了，需要帮助吗？",
+            "mindbox": f"你之前提到的{candidate.topic or '那件事'}，现在怎么样了？",
+            "weather": "天气变化了，记得注意一下~",
+        }
+        text = templates.get(candidate.trigger_kind, "在想你呢~")
+        
+        # Record the expression
+        self.runtime.proactive_scheduler.record_expression(candidate)
+        
+        # Write to event log
+        if self._events:
+            self._events.record(
+                "proactive_expression",
+                f"[{candidate.trigger_kind}] {text}",
+                metadata={
+                    "trigger": candidate.trigger_kind,
+                    "priority": candidate.priority,
+                    "presentation": request.get("presentation", "popup"),
+                }
+            )
+        
+        return {
+            "success": True,
+            "expression": {
+                "text": text,
+                "kind": "proactive",
+                "emotion": "gentle",
+                "directive": {},
+            }
+        }
+
+
+
+
 def _context(config):
     return RoleContext(config, config.role_id)
 
@@ -1054,6 +1289,92 @@ def _post_json(url: str, body: dict, headers: dict) -> dict:
     request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
     with urllib.request.urlopen(request, timeout=45.0) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+    def _check_proactive(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Check if a proactive expression candidate is available."""
+        if not self.runtime or not self.runtime.proactive_scheduler:
+            return {"candidate": None}
+        
+        # Build context from current runtime state
+        state = self.runtime.role_state
+        context = {
+            "last_interaction_ts": getattr(state, "last_interaction_ts", None),
+            "perception": request.get("perception", {}),
+            "window": state.window.__dict__ if hasattr(state, "window") else {},
+            "mode": self._mode.state(self._foreground_app()).mode,
+            "mind_box": state.mind_box if hasattr(state, "mind_box") else [],
+            "weather": request.get("weather"),
+        }
+        
+        candidate = self.runtime.tick_proactive_scheduler(context)
+        
+        if candidate:
+            return {
+                "candidate": {
+                    "trigger_kind": candidate.trigger_kind,
+                    "priority": candidate.priority,
+                    "reason": candidate.reason,
+                    "topic": candidate.topic,
+                    "metadata": candidate.metadata,
+                }
+            }
+        return {"candidate": None}
+    
+    def _send_proactive(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Generate and send a proactive expression."""
+        if not self.runtime or not self.runtime.proactive_scheduler:
+            return {"success": False, "error": "scheduler_not_available"}
+        
+        candidate_data = request.get("candidate")
+        if not candidate_data:
+            return {"success": False, "error": "missing_candidate"}
+        
+        # Reconstruct candidate from data
+        from cether.proactive import ProactiveCandidate
+        candidate = ProactiveCandidate(
+            trigger_kind=candidate_data["trigger_kind"],
+            priority=candidate_data["priority"],
+            reason=candidate_data["reason"],
+            topic=candidate_data.get("topic"),
+            metadata=candidate_data.get("metadata"),
+        )
+        
+        # Generate expression
+        state = self.runtime.role_state
+        expression = self.runtime.generate_proactive_expression(
+            candidate,
+            state.__dict__ if hasattr(state, "__dict__") else {},
+            self.runtime.expression_provider,
+        )
+        
+        if not expression:
+            return {"success": False, "error": "generation_failed"}
+        
+        # Record the expression
+        self.runtime.proactive_scheduler.record_expression(candidate)
+        
+        # Write to event log
+        if self._events:
+            self._events.record(
+                "proactive_expression",
+                f"[{candidate.trigger_kind}] {expression.get('text', '')}",
+                metadata={
+                    "trigger": candidate.trigger_kind,
+                    "priority": candidate.priority,
+                    "presentation": request.get("presentation", "popup"),
+                }
+            )
+        
+        return {
+            "success": True,
+            "expression": {
+                "text": expression.get("text", ""),
+                "kind": expression.get("kind", "proactive"),
+                "emotion": expression.get("emotion", "gentle"),
+                "directive": expression.get("directive", {}),
+            }
+        }
 
 
 def main() -> None:

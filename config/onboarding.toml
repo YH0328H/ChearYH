@@ -1,0 +1,88 @@
+# 首次引导配置
+
+# 六模块引导内容
+[[modules]]
+id = "conversation"
+name = "对话与角色"
+order = 1
+description = "了解如何与 CetherYH 对话，创建和切换角色"
+steps = [
+    "欢迎！我是你的 AI 陪伴，可以与你自然对话",
+    "你可以创建多个角色，每个角色都有独特的性格和记忆",
+    "试着说句话，我会回应你",
+]
+completed_hint = "很好！我们已经开始对话了"
+
+[[modules]]
+id = "memory"
+name = "记忆分层"
+order = 2
+description = "CetherYH 如何记住你们的对话和经历"
+steps = [
+    "我会记住我们的对话，分为工作记忆、心事和长期记忆",
+    "重要的事情会被保存为'心事'，定期回顾",
+    "长期记忆会自动巩固，形成你的专属记忆空间",
+]
+completed_hint = "记忆系统已准备就绪"
+
+[[modules]]
+id = "perception"
+name = "感知授权"
+order = 3
+description = "允许 CetherYH 感知你的屏幕和工作状态"
+steps = [
+    "我可以感知你的屏幕内容，更好地理解你的工作",
+    "这需要你的授权，可以随时开启或关闭",
+    "感知到的内容仅用于对话理解，不会上传",
+]
+completed_hint = "感知权限已配置"
+
+[[modules]]
+id = "window"
+name = "窗口与休眠"
+order = 4
+description = "CetherYH 如何判断你的活动状态"
+steps = [
+    "当检测到你在使用电脑时，我会保持清醒",
+    "长时间不活动时，我会进入休眠节省资源",
+    "你也可以手动设置休眠时间",
+]
+completed_hint = "活动检测已配置"
+
+[[modules]]
+id = "skills"
+name = "技能与工具"
+order = 5
+description = "CetherYH 可以使用的工具和技能"
+steps = [
+    "我可以帮你搜索网络、执行命令、读写文件",
+    "这些能力需要你的授权才能使用",
+    "你可以在设置中管理我的技能权限",
+]
+completed_hint = "技能系统已就绪"
+
+[[modules]]
+id = "config"
+name = "配置与降级"
+order = 6
+description = "配置对话模型和降级策略"
+steps = [
+    "你可以配置云端 API（OpenAI/DeepSeek）或使用本地模型",
+    "如果云端失败，会自动降级到本地规则回复",
+    "也可以启用 Ollama 本地模型作为中间降级",
+]
+completed_hint = "配置已保存，开始使用吧！"
+
+# 全局引导设置
+[settings]
+# 是否在首次启动时自动显示引导
+auto_show = true
+
+# 是否允许跳过引导
+allow_skip = true
+
+# 引导完成后是否显示欢迎消息
+show_welcome = true
+
+# 欢迎消息内容
+welcome_message = "欢迎回来！我已经准备好陪伴你了。随时开始对话吧~"
